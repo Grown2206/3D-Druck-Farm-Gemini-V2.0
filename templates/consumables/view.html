@@ -1,0 +1,414 @@
+{% extends "base.html" %}
+
+{% block title %}{{ consumable.name }} - Details{% endblock %}
+
+{% block head_extra %}
+<style>
+    .detail-image {
+        max-width: 100%;
+        max-height: 400px;
+        object-fit: contain;
+        border-radius: 0.5rem;
+        background-color: #2d3236;
+        padding: 1rem;
+    }
+    .info-card {
+        background-color: #2d3236;
+        padding: 1.5rem;
+        border-radius: 0.5rem;
+        margin-bottom: 1rem;
+    }
+    .info-label {
+        color: #adb5bd;
+        font-size: 0.9rem;
+        margin-bottom: 0.25rem;
+    }
+    .info-value {
+        font-size: 1.1rem;
+        font-weight: 500;
+    }
+    .hazard-symbol-large {
+        width: 60px;
+        height: 60px;
+        margin: 5px;
+    }
+    .stock-gauge {
+        height: 30px;
+        border-radius: 15px;
+        background-color: #495057;
+        position: relative;
+        overflow: hidden;
+    }
+    .stock-gauge-fill {
+        height: 100%;
+        transition: width 0.3s;
+    }
+    .stock-gauge-text {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-weight: bold;
+        color: white;
+        z-index: 1;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="main-header">
+    <h1><i class="bi bi-box-seam"></i> {{ consumable.name }}</h1>
+    <div class="header-actions">
+        <a href="{{ url_for('consumables_bp.edit_consumable', consumable_id=consumable.id) }}" class="btn btn-primary">
+            <i class="bi bi-pencil-fill"></i> Bearbeiten
+        </a>
+        <button type="button" class="btn btn-danger"
+                data-bs-toggle="modal"
+                data-bs-target="#confirmDeleteModal"
+                data-item-type="Verbrauchsmaterial"
+                data-item-name="{{ consumable.name }}"
+                data-form-action="{{ url_for('consumables_bp.delete_consumable', consumable_id=consumable.id) }}">
+            <i class="bi bi-trash-fill"></i> Löschen
+        </button>
+        <a href="{{ url_for('consumables_bp.list_consumables') }}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left"></i> Zurück
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Linke Spalte: Bild und Basis-Info -->
+    <div class="col-md-4">
+        <div class="card mb-3">
+            <div class="card-body text-center">
+                {% if consumable.image_url %}
+                <img src="{{ url_for('static', filename=consumable.image_url) }}" class="detail-image" alt="{{ consumable.name }}">
+                {% else %}
+                <div class="detail-image d-flex align-items-center justify-content-center">
+                    <i class="bi bi-box-seam" style="font-size: 6rem; color: #6c757d;"></i>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="info-card">
+            <h5 class="mb-3"><i class="bi bi-info-circle"></i> Übersicht</h5>
+            <div class="mb-3">
+                <div class="info-label">Kategorie</div>
+                <div class="info-value"><span class="badge bg-secondary">{{ consumable.category.value }}</span></div>
+            </div>
+            {% if consumable.manufacturer %}
+            <div class="mb-3">
+                <div class="info-label">Hersteller</div>
+                <div class="info-value">{{ consumable.manufacturer }}</div>
+            </div>
+            {% endif %}
+            {% if consumable.supplier %}
+            <div class="mb-3">
+                <div class="info-label">Lieferant</div>
+                <div class="info-value">{{ consumable.supplier }}</div>
+            </div>
+            {% endif %}
+            {% if consumable.article_number %}
+            <div class="mb-3">
+                <div class="info-label">Artikelnummer</div>
+                <div class="info-value"><code>{{ consumable.article_number }}</code></div>
+            </div>
+            {% endif %}
+            {% if consumable.ean %}
+            <div class="mb-3">
+                <div class="info-label">EAN</div>
+                <div class="info-value"><code>{{ consumable.ean }}</code></div>
+            </div>
+            {% endif %}
+            {% if consumable.datasheet_url %}
+            <div class="mb-3">
+                <a href="{{ consumable.datasheet_url }}" target="_blank" class="btn btn-sm btn-outline-info w-100">
+                    <i class="bi bi-file-earmark-pdf"></i> Datenblatt öffnen
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- Rechte Spalte: Details -->
+    <div class="col-md-8">
+        <!-- Lagerbestand -->
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-box"></i> Lagerbestand</h5>
+            </div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <div class="info-card">
+                            <div class="info-label">Aktueller Bestand</div>
+                            <div class="info-value">
+                                <span class="badge badge-lg
+                                    {% if consumable.stock_status == 'critical' %}bg-danger
+                                    {% elif consumable.stock_status == 'low' %}bg-warning text-dark
+                                    {% elif consumable.stock_status == 'full' %}bg-success
+                                    {% else %}bg-secondary{% endif %}"
+                                    style="font-size: 1.5rem; padding: 0.75rem 1.5rem;">
+                                    {{ consumable.stock_level }} {{ consumable.unit }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="info-card">
+                            <div class="info-label">Lagerwert</div>
+                            <div class="info-value">
+                                {% if consumable.unit_price %}
+                                {{ "%.2f"|format(consumable.total_value) }} {{ consumable.currency }}
+                                {% else %}
+                                <span class="text-muted">Nicht verfügbar</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Bestandsanzeige -->
+                {% if consumable.max_stock and consumable.max_stock > 0 %}
+                <div class="mb-3">
+                    <div class="stock-gauge">
+                        {% set stock_percent = (consumable.stock_level / consumable.max_stock * 100) | int %}
+                        <div class="stock-gauge-fill 
+                            {% if stock_percent < 20 %}bg-danger
+                            {% elif stock_percent < 50 %}bg-warning
+                            {% else %}bg-success{% endif %}"
+                            style="width: {{ [stock_percent, 100] | min }}%;">
+                        </div>
+                        <div class="stock-gauge-text">{{ stock_percent }}% gefüllt</div>
+                    </div>
+                </div>
+                {% endif %}
+                
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="info-label">Mindestbestand</div>
+                        <div class="info-value">{{ consumable.min_stock if consumable.min_stock else '-' }}</div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="info-label">Nachbestellschwelle</div>
+                        <div class="info-value">{{ consumable.reorder_level if consumable.reorder_level else '-' }}</div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="info-label">Maximalbestand</div>
+                        <div class="info-value">{{ consumable.max_stock if consumable.max_stock else '-' }}</div>
+                    </div>
+                </div>
+                
+                {% if consumable.storage_location %}
+                <div class="mt-3">
+                    <div class="info-label">Lagerort</div>
+                    <div class="info-value"><i class="bi bi-geo-alt"></i> {{ consumable.storage_location }}</div>
+                </div>
+                {% endif %}
+                
+                <!-- Bestand anpassen -->
+                <div class="mt-4">
+                    <h6>Bestand anpassen</h6>
+                    <form method="POST" action="{{ url_for('consumables_bp.adjust_stock', consumable_id=consumable.id) }}" class="d-flex gap-2">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                        <input type="number" name="adjustment" class="form-control" placeholder="±Menge" style="max-width: 150px;">
+                        <button type="submit" class="btn btn-primary"><i class="bi bi-plus-slash-minus"></i> Anpassen</button>
+                    </form>
+                    <small class="text-muted">Positive Zahl zum Hinzufügen, negative zum Entfernen</small>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Haltbarkeit -->
+        {% if consumable.has_expiry %}
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-calendar-x"></i> Haltbarkeit</h5>
+            </div>
+            <div class="card-body">
+                {% if consumable.expiry_date %}
+                <div class="alert 
+                    {% if consumable.is_expired %}alert-danger
+                    {% elif consumable.is_expiring_soon %}alert-warning
+                    {% else %}alert-info{% endif %}">
+                    <strong>
+                        {% if consumable.is_expired %}
+                        <i class="bi bi-x-circle-fill"></i> Abgelaufen seit {{ consumable.expiry_date.strftime('%d.%m.%Y') }}
+                        {% elif consumable.is_expiring_soon %}
+                        <i class="bi bi-exclamation-triangle-fill"></i> Verfällt am {{ consumable.expiry_date.strftime('%d.%m.%Y') }}
+                        {% else %}
+                        <i class="bi bi-check-circle-fill"></i> Gültig bis {{ consumable.expiry_date.strftime('%d.%m.%Y') }}
+                        {% endif %}
+                    </strong>
+                </div>
+                {% else %}
+                <p class="text-muted">Kein Verfallsdatum angegeben</p>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Sicherheitshinweise -->
+        {% if consumable.hazard_symbols or consumable.safety_warnings %}
+        <div class="card mb-3">
+            <div class="card-header bg-warning text-dark">
+                <h5 class="mb-0"><i class="bi bi-exclamation-triangle-fill"></i> Sicherheitshinweise</h5>
+            </div>
+            <div class="card-body">
+                {% if consumable.hazard_symbols %}
+                <div class="mb-3">
+                    <h6>Gefahrensymbole</h6>
+                    <div>
+                        {% for symbol in consumable.get_hazard_symbols_list() %}
+                        <img src="{{ url_for('static', filename='hazard_symbols/' ~ symbol.split(' - ')[0] ~ '.png') }}" 
+                             class="hazard-symbol-large" 
+                             title="{{ symbol }}" 
+                             alt="{{ symbol }}">
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+                
+                {% if consumable.safety_warnings %}
+                <div>
+                    <h6>Warnhinweise</h6>
+                    <ul class="list-unstyled">
+                        {% for warning in consumable.get_safety_warnings_list() %}
+                        <li class="mb-2"><i class="bi bi-exclamation-circle text-warning"></i> {{ warning }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Beschreibung -->
+        {% if consumable.description or consumable.usage_description %}
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-file-text"></i> Beschreibung</h5>
+            </div>
+            <div class="card-body">
+                {% if consumable.description %}
+                <p>{{ consumable.description }}</p>
+                {% endif %}
+                {% if consumable.usage_description %}
+                <h6>Verwendungszweck</h6>
+                <p class="text-muted">{{ consumable.usage_description }}</p>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Technische Daten -->
+        {% if consumable.get_specifications() %}
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-gear"></i> Technische Spezifikationen</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <tbody>
+                            {% for key, value in consumable.get_specifications().items() %}
+                            <tr>
+                                <td class="text-muted" style="width: 40%;">{{ key }}</td>
+                                <td><strong>{{ value }}</strong></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Kompatibilität -->
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-printer"></i> Kompatibilität</h5>
+            </div>
+            <div class="card-body">
+                {% if consumable.compatible_printers | length > 0 %}
+                <h6>Kompatible Drucker ({{ consumable.compatible_printers | length }})</h6>
+                <div class="row">
+                    {% for printer in consumable.compatible_printers %}
+                    <div class="col-md-6 mb-2">
+                        <a href="{{ url_for('printers_bp.printer_details', printer_id=printer.id) }}" class="btn btn-outline-secondary btn-sm w-100">
+                            <i class="bi bi-printer"></i> {{ printer.name }}
+                        </a>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-muted">Keine spezifischen Drucker zugeordnet</p>
+                {% endif %}
+                
+                {% if consumable.compatibility_tags %}
+                <div class="mt-3">
+                    <h6>Kompatibilitäts-Tags</h6>
+                    {% for tag in consumable.get_compatibility_tags_list() %}
+                    <span class="badge bg-info me-1">{{ tag }}</span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Bestellinformationen -->
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-cart"></i> Bestellinformationen</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    {% if consumable.unit_price %}
+                    <div class="col-md-6 mb-3">
+                        <div class="info-label">Preis pro Einheit</div>
+                        <div class="info-value">{{ "%.2f"|format(consumable.unit_price) }} {{ consumable.currency }}</div>
+                    </div>
+                    {% endif %}
+                    {% if consumable.last_ordered_date %}
+                    <div class="col-md-6 mb-3">
+                        <div class="info-label">Letzte Bestellung</div>
+                        <div class="info-value">{{ consumable.last_ordered_date.strftime('%d.%m.%Y') }}</div>
+                    </div>
+                    {% endif %}
+                    {% if consumable.last_order_quantity %}
+                    <div class="col-md-6 mb-3">
+                        <div class="info-label">Letzte Bestellmenge</div>
+                        <div class="info-value">{{ consumable.last_order_quantity }} {{ consumable.unit }}</div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <!-- Notizen -->
+        {% if consumable.notes %}
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-journal-text"></i> Notizen</h5>
+            </div>
+            <div class="card-body">
+                <p class="mb-0" style="white-space: pre-wrap;">{{ consumable.notes }}</p>
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Metadaten -->
+        <div class="card mb-3">
+            <div class="card-body">
+                <small class="text-muted">
+                    <i class="bi bi-clock"></i> Erstellt: {{ consumable.created_at.strftime('%d.%m.%Y %H:%M') }}
+                    {% if consumable.updated_at and consumable.updated_at != consumable.created_at %}
+                    | Aktualisiert: {{ consumable.updated_at.strftime('%d.%m.%Y %H:%M') }}
+                    {% endif %}
+                </small>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

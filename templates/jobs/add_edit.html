@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+
+{% block title %}{{ form_title }}{% endblock %}
+
+{% block content %}
+<div class="main-header">
+    <h1><i class="bi bi-card-list"></i> {{ form_title }}</h1>
+    <a href="{{ url_for('jobs_bp.list_jobs') }}" class="btn btn-secondary">
+        <i class="bi bi-arrow-left"></i> Zurück zur Liste
+    </a>
+</div>
+
+<form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+    <div class="card">
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-8">
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Auftragsname <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="name" name="name" value="{{ job.name or '' }}" required>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="mb-3">
+                        <label for="priority" class="form-label">Priorität</label>
+                        <input type="number" class="form-control" id="priority" name="priority" value="{{ job.priority or '1' }}">
+                    </div>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label for="required_filament_type_id" class="form-label">Benötigtes Filament</label>
+                        <select class="form-select" id="required_filament_type_id" name="required_filament_type_id">
+                            <option value="">-- Filament-Typ auswählen --</option>
+                            {% for ftype in filament_types %}
+                            <option value="{{ ftype.id }}" {% if job and job.required_filament_type_id == ftype.id %}selected{% endif %}>
+                                {{ ftype.manufacturer }} - {{ ftype.name }} ({{ ftype.material_type }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                     <div class="mb-3">
+                        <label for="gcode_file_id" class="form-label">G-Code-Datei (optional)</label>
+                        <select class="form-select" id="gcode_file_id" name="gcode_file_id">
+                            <option value="">-- G-Code auswählen --</option>
+                            {% for gcode in gcode_files %}
+                            <option value="{{ gcode.id }}" {% if job and job.gcode_file_id == gcode.id %}selected{% endif %}>
+                                {{ gcode.filename }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            {# --- NEUER ABSCHNITT --- #}
+            <div class="row">
+                <div class="col-md-12">
+                    <div class="mb-3">
+                        <label for="source_stl_filename" class="form-label">Zugehörige STL-Datei (für Batch-Planung)</label>
+                        <select class="form-select" id="source_stl_filename" name="source_stl_filename">
+                            <option value="">-- Keine STL-Datei zuordnen --</option>
+                            {% for stl_file in available_stls %}
+                                <option value="{{ stl_file }}" {% if job and job.source_stl_filename == stl_file %}selected{% endif %}>
+                                    {{ stl_file }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                         <div class="form-text">Diese Auswahl ist notwendig, damit der Auftrag im Batch-Planer verwendet werden kann.</div>
+                    </div>
+                </div>
+            </div>
+            {# --- ENDE NEUER ABSCHNITT --- #}
+
+            <div class="row">
+                 <div class="col-md-4">
+                    <div class="mb-3">
+                        <label for="target_quantity_parts" class="form-label">Sollmenge (Stück)</label>
+                        <input type="number" class="form-control" id="target_quantity_parts" name="target_quantity_parts" value="{{ job.target_quantity_parts or '' }}">
+                    </div>
+                </div>
+                <div class="col-md-4">
+                     <div class="mb-3">
+                        <label for="estimated_end_date" class="form-label">Geschätztes Enddatum</label>
+                        <input type="date" class="form-control" id="estimated_end_date" name="estimated_end_date" value="{{ (job.estimated_end_date.strftime('%Y-%m-%d') if job and job.estimated_end_date) or '' }}">
+                    </div>
+                </div>
+                 <div class="col-md-4">
+                    {% if job %}
+                    <div class="mb-3">
+                        <label for="status" class="form-label">Status</label>
+                        <select class="form-select" id="status" name="status">
+                            {% for s in models.JobStatus %}
+                            <option value="{{ s.value }}" {% if job.status == s %}selected{% endif %}>{{ s.value }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="card-footer text-end">
+            <button type="submit" class="btn btn-primary"><i class="bi bi-check-circle-fill"></i> Speichern</button>
+        </div>
+    </div>
+</form>
+{% endblock %}

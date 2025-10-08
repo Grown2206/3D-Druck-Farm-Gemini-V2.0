@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block title %}Slicer{% endblock %}
+
+{% block content %}
+<div class="main-header">
+    <h1><i class="bi bi-person-bounding-box"></i> Slicer</h1>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <h5 class="card-title">STL zu G-Code umwandeln</h5>
+        <p class="card-text">Laden Sie eine STL-Datei hoch und wählen Sie die Slicer-Einstellungen, um eine G-Code-Datei für den Druck zu erzeugen.</p>
+        
+        <form action="{{ url_for('slicer_bp.slice_file') }}" method="post" enctype="multipart/form-data">
+            {{ form.hidden_tag() }}
+
+            <div class="mb-3">
+                <label for="stl_file" class="form-label">1. STL-Datei auswählen</label>
+                {{ form.stl_file(class="form-control") }}
+                {% for error in form.stl_file.errors %}
+                    <div class="text-danger small">{{ error }}</div>
+                {% endfor %}
+            </div>
+
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="printer_id" class="form-label">2. Drucker auswählen</label>
+                    {{ form.printer_id(class="form-select") }}
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="material_type" class="form-label">3. Material-Typ auswählen</label>
+                    {{ form.material_type(class="form-select") }}
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label for="slicer_profile_id" class="form-label">4. Slicer-Profil auswählen</label>
+                {{ form.slicer_profile_id(class="form-select") }}
+                <div class="form-text">
+                    Die verfügbaren Profile werden basierend auf dem ausgewählten Drucker und Materialtyp gefiltert.
+                </div>
+            </div>
+
+            <div class="d-grid">
+                <button type="submit" class="btn btn-primary btn-lg">
+                    <i class="bi bi-gear-wide-connected"></i> Slicing-Prozess starten
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="slicing-status" class="mt-4" style="display: none;">
+    <div class="card">
+        <div class="card-body">
+            <h5 class="card-title">Slicing-Status</h5>
+            <div class="progress mb-2" style="height: 25px;">
+                <div id="slicing-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
+            </div>
+            <pre id="slicing-output" class="bg-dark text-white p-3 rounded" style="max-height: 400px; overflow-y: auto;"></pre>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const printerSelect = document.getElementById('printer_id');
+    const materialSelect = document.getElementById('material_type');
+    const profileSelect = document.getElementById('slicer_profile_id');
+
+    function updateProfiles() {
+        const printerId = printerSelect.value;
+        const materialType = materialSelect.value;
+
+        if (!printerId && !materialType) {
+            profileSelect.innerHTML = '<option value="">-- Zuerst Drucker oder Material wählen --</option>';
+            return;
+        }
+
+        fetch("{{ url_for('api_bp.filter_slicer_profiles') }}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': "{{ csrf_token() }}"
+            },
+            body: JSON.stringify({
+                printer_id: printerId,
+                material_type: materialType
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            profileSelect.innerHTML = '<option value="">-- Profil auswählen --</option>';
+            data.forEach(profile => {
+                const option = document.createElement('option');
+                option.value = profile.id;
+                option.textContent = profile.name;
+                profileSelect.appendChild(option);
+            });
+        });
+    }
+
+    printerSelect.addEventListener('change', updateProfiles);
+    materialSelect.addEventListener('change', updateProfiles);
+
+    // Initial load
+    updateProfiles();
+});
+</script>
+{% endblock %}

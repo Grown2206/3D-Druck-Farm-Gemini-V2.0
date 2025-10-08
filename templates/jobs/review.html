@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+
+{% block title %}Review: {{ job.name }}{% endblock %}
+{% block page_title %}Job-Review: {{ job.name }}{% endblock %}
+
+{% block content %}
+<div class="main-header">
+    <h1><i class="bi bi-search"></i> Job-Review</h1>
+    <a href="{{ url_for('jobs_bp.job_details', job_id=job.id) }}" class="btn btn-secondary">Zurück zu den Details</a>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2>Gesamtbewertung des Auftrags</h2>
+    </div>
+    <div class="card-body">
+        <p>Bewerten Sie hier das Gesamtergebnis des Druckauftrags.</p>
+        <div class="mt-3">
+            <button id="review-success-btn" class="btn btn-lg btn-success me-2"><i class="bi bi-check-circle-fill"></i> Als Erfolgreich markieren</button>
+            <button id="review-fail-btn" class="btn btn-lg btn-danger"><i class="bi bi-x-circle-fill"></i> Als Fehlgeschlagen markieren</button>
+        </div>
+    </div>
+</div>
+
+<div class="card mt-4">
+    <div class="card-header">
+        <h2>Snapshot-Analyse (Trainingsdaten für KI)</h2>
+    </div>
+    <div class="card-body">
+        <p>Gehen Sie die aufgenommenen Bilder durch und markieren Sie diejenigen, die einen Fehldruck (z.B. "Spaghetti", Layer-Shift) zeigen. Dies hilft, die KI für die automatische Fehlererkennung zu trainieren.</p>
+        <div class="row g-3 mt-2">
+            {% for snapshot in snapshots %}
+            <div class="col-md-4 col-lg-3">
+                <div class="card h-100" id="snapshot-{{ snapshot.id }}">
+                    <img src="{{ url_for('static', filename=snapshot.image_filename) }}" class="card-img-top" alt="Snapshot von {{ snapshot.timestamp.strftime('%H:%M:%S') }}">
+                    <div class="card-body text-center">
+                        <p class="card-text"><small class="text-muted">{{ snapshot.timestamp.strftime('%d.%m.%Y %H:%M:%S') }}</small></p>
+                        <div class="btn-group w-100">
+                            <button class="btn btn-sm {% if not snapshot.is_failure %}btn-success{% else %}btn-outline-success{% endif %} label-btn" 
+                                    data-snapshot-id="{{ snapshot.id }}" 
+                                    data-is-failure="false">
+                                <i class="bi bi-check-circle"></i> OK
+                            </button>
+                            <button class="btn btn-sm {% if snapshot.is_failure %}btn-danger{% else %}btn-outline-danger{% endif %} label-btn" 
+                                    data-snapshot-id="{{ snapshot.id }}" 
+                                    data-is-failure="true">
+                                <i class="bi bi-x-octagon"></i> Fehler
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <div class="col">
+                <p class="text-muted">Für diesen Auftrag wurden keine Snapshots erstellt.</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const csrfToken = "{{ csrf_token() }}";
+
+    // Funktion zur Bewertung des gesamten Jobs
+    function reviewJob(quality) {
+        fetch(`{{ url_for('api_bp.review_job', job_id=job.id) }}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+            body: JSON.stringify({ quality: quality }),
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                window.location.href = "{{ url_for('jobs_bp.job_details', job_id=job.id) }}";
+            } else { alert("Fehler: " + data.message); }
+        })
+        .catch(error => console.error('Fetch Error:', error));
+    }
+
+    // Funktion zum Labeln eines einzelnen Snapshots
+    function labelSnapshot(snapshotId, isFailure) {
+        // ##### HIER IST DIE KORREKTUR #####
+        // 1. Erstelle eine URL mit einer Dummy-ID (z.B. 0), damit der Server sie bauen kann.
+        const urlTemplate = "{{ url_for('api_bp.label_snapshot', snapshot_id=0) }}";
+        // 2. Ersetze die Dummy-ID durch die echte ID im JavaScript.
+        const finalUrl = urlTemplate.replace('0', snapshotId);
+
+        fetch(finalUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+            body: JSON.stringify({ is_failure: isFailure }),
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                const container = document.getElementById(`snapshot-${snapshotId}`);
+                if (container) {
+                    const okButton = container.querySelector('[data-is-failure="false"]');
+                    const failButton = container.querySelector('[data-is-failure="true"]');
+                    if (isFailure) {
+                        failButton.classList.replace('btn-outline-danger', 'btn-danger');
+                        okButton.classList.replace('btn-success', 'btn-outline-success');
+                    } else {
+                        okButton.classList.replace('btn-outline-success', 'btn-success');
+                        failButton.classList.replace('btn-danger', 'btn-outline-danger');
+                    }
+                }
+            } else { alert("Fehler: " + data.message); }
+        })
+        .catch(error => console.error('Fetch Error:', error));
+    }
+
+    document.getElementById('review-success-btn')?.addEventListener('click', () => reviewJob('SUCCESSFUL'));
+    document.getElementById('review-fail-btn')?.addEventListener('click', () => reviewJob('FAILED'));
+
+    document.querySelectorAll('.label-btn').forEach(button => {
+        button.addEventListener('click', function() {
+            const snapshotId = this.dataset.snapshotId;
+            const isFailure = this.dataset.isFailure === 'true';
+            labelSnapshot(snapshotId, isFailure);
+        });
+    });
+});
+</script>
+{% endblock %}

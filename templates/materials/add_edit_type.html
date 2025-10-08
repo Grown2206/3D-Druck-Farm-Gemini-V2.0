@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+
+{% block title %}
+    {% if type %}
+        Filament-Typ bearbeiten: {{ type.name }}
+    {% else %}
+        Neuen Filament-Typ anlegen
+    {% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="main-header">
+    {% if type %}
+        <h1><i class="bi bi-pencil-fill"></i> Filament-Typ bearbeiten</h1>
+    {% else %}
+        <h1><i class="bi bi-plus-circle-fill"></i> Neuen Filament-Typ anlegen</h1>
+    {% endif %}
+    <div class="header-actions">
+        <a href="{{ url_for('materials_bp.list_types') }}" class="btn btn-secondary"><i class="bi bi-arrow-left"></i> Zurück zur Übersicht</a>
+    </div>
+</div>
+
+<form method="POST" class="card">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <label for="manufacturer" class="form-label">Hersteller</label>
+                <input type="text" id="manufacturer" name="manufacturer" class="form-control" value="{{ type.manufacturer or '' }}" required placeholder="z.B. Buddy3D">
+            </div>
+            <div class="col-md-6 mb-3">
+                <label for="name" class="form-label">Filament-Name</label>
+                <input type="text" id="name" name="name" class="form-control" value="{{ type.name or '' }}" required placeholder="z.B. PLA+">
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <label for="material_type" class="form-label">Material-Typ</label>
+                <input type="text" id="material_type" name="material_type" class="form-control" value="{{ type.material_type or '' }}" required placeholder="z.B. PLA">
+            </div>
+            <div class="col-md-6 mb-3">
+                <label for="color_hex" class="form-label">Farbe</label>
+                <div class="input-group">
+                    <input type="color" id="color_hex" name="color_hex" class="form-control form-control-color" value="{{ type.color_hex or '#FFFFFF' }}" title="Farbe auswählen">
+                    <input type="text" class="form-control" value="{{ type.color_hex or '#FFFFFF' }}" onchange="document.getElementById('color_hex').value = this.value">
+                </div>
+            </div>
+        </div>
+        
+        <hr>
+        <h5 class="mb-3">Technische Daten & Kosten</h5>
+        
+        <div class="row">
+             <div class="col-md-4 mb-3">
+                <label for="spool_weight_g" class="form-label">Spulengewicht (g)</label>
+                <input type="number" id="spool_weight_g" name="spool_weight_g" class="form-control" value="{{ type.spool_weight_g or 1000 }}" step="50">
+            </div>
+            <div class="col-md-4 mb-3">
+                <label for="cost_per_spool" class="form-label">Kosten pro Spule (€)</label>
+                <input type="number" id="cost_per_spool" name="cost_per_spool" class="form-control" value="{{ type.cost_per_spool or '' }}" step="0.01">
+            </div>
+             <div class="col-md-4 mb-3">
+                <label for="reorder_level_g" class="form-label">Meldebestand (g)</label>
+                <input type="number" id="reorder_level_g" name="reorder_level_g" class="form-control" value="{{ type.reorder_level_g or '' }}" placeholder="Optional">
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <label for="density_gcm3" class="form-label">Dichte (g/cm³)</label>
+                <input type="number" id="density_gcm3" name="density_gcm3" class="form-control" value="{{ type.density_gcm3 or 1.24 }}" step="0.01">
+            </div>
+            <div class="col-md-6 mb-3">
+                <label for="diameter_mm" class="form-label">Durchmesser (mm)</label>
+                <input type="number" id="diameter_mm" name="diameter_mm" class="form-control" value="{{ type.diameter_mm or 1.75 }}" step="0.01">
+            </div>
+        </div>
+        
+        <hr>
+        <h5 class="mb-3">Druckeinstellungen & Notizen</h5>
+
+        {% set print_settings = type.get_print_settings() if type else {} %}
+        <div class="row">
+            <div class="col-md-4 mb-3">
+                <label for="nozzle_temp" class="form-label">Düsentemperatur (°C)</label>
+                <input type="text" id="nozzle_temp" name="nozzle_temp" class="form-control" value="{{ print_settings.nozzle_temp or '' }}" placeholder="z.B. 210-225">
+            </div>
+            <div class="col-md-4 mb-3">
+                <label for="bed_temp" class="form-label">Druckbetttemperatur (°C)</label>
+                <input type="text" id="bed_temp" name="bed_temp" class="form-control" value="{{ print_settings.bed_temp or '' }}" placeholder="z.B. 55-65">
+            </div>
+            <div class="col-md-4 mb-3">
+                <label for="print_speed" class="form-label">Druckgeschwindigkeit (mm/s)</label>
+                <input type="text" id="print_speed" name="print_speed" class="form-control" value="{{ print_settings.print_speed or '' }}" placeholder="z.B. 40-60">
+            </div>
+        </div>
+
+        <div class="mb-3">
+            <label for="notes" class="form-label">Notizen</label>
+            <textarea id="notes" name="notes" class="form-control" rows="3">{{ type.notes or '' }}</textarea>
+        </div>
+
+    </div>
+    <div class="card-footer text-end">
+        <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Speichern</button>
+    </div>
+</form>
+{% endblock %}

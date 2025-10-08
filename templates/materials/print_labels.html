@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Etiketten drucken</title>
+    <style>
+        @media print {
+            body { -webkit-print-color-adjust: exact; }
+            .no-print { display: none; }
+        }
+        body { font-family: sans-serif; }
+        .label-container {
+            display: flex;
+            flex-wrap: wrap;
+        }
+        .label {
+            width: 80mm;
+            height: 40mm;
+            border: 1px dashed #ccc;
+            padding: 5mm;
+            margin: 5mm;
+            box-sizing: border-box;
+            display: grid;
+            grid-template-columns: 25mm 1fr;
+            grid-template-rows: auto 1fr;
+            gap: 5px 10px;
+            page-break-inside: avoid;
+            position: relative;
+        }
+        .qr-code { grid-area: 1 / 1 / 3 / 2; }
+        .qr-code img { width: 100%; height: auto; }
+        .details { grid-area: 1 / 2 / 3 / 2; display: flex; flex-direction: column; justify-content: center;}
+        h1, h2, p { margin: 0; }
+        h1 { font-size: 14pt; }
+        h2 { font-size: 10pt; font-weight: normal; color: #555; }
+        .short-id {
+            font-family: monospace;
+            font-size: 16pt;
+            font-weight: bold;
+            position: absolute;
+            top: 5px;
+            right: 5px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="no-print" style="padding: 10px;">
+    <button onclick="window.print()">Drucken</button>
+    <a href="{{ url_for('materials_bp.list_filaments') }}">Zurück zum Inventar</a>
+</div>
+
+<div class="label-container">
+    {% for spool in spools %}
+    <div class="label">
+        <div class="qr-code">
+            <!-- HIER DIE KORREKTUR: Die URL verweist jetzt auf die QR-Code-Route für Spulen -->
+            <img src="{{ url_for('materials_bp.qr_code', spool_id=spool.id, _external=True) }}" alt="QR Code">
+        </div>
+        <div class="details">
+            <h1>{{ spool.filament_type.manufacturer }} {{ spool.filament_type.name }}</h1>
+            <h2>{{ spool.filament_type.material_type }}</h2>
+            <p>Gekauft: {{ spool.purchase_date.strftime('%d.%m.%Y') if spool.purchase_date else '-' }}</p>
+        </div>
+        <div class="short-id">{{ spool.short_id }}</div>
+    </div>
+    {% endfor %}
+</div>
+
+</body>
+</html>

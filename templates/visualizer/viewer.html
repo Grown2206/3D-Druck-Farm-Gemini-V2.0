@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+
+{% block title %}3D G-Code Vorschau{% endblock %}
+
+{% block head_extra %}
+<script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.164.1/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.164.1/examples/jsm/"
+        }
+    }
+</script>
+<style>
+    #viewer-container {
+        width: 100%;
+        height: 75vh; /* Etwas mehr Höhe für die neue Leiste */
+        background-color: #1a1a1a;
+        position: relative;
+    }
+    #loading-indicator {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        color: white;
+        font-size: 1.5rem;
+        z-index: 10;
+        text-align: center;
+    }
+    canvas {
+        display: block;
+    }
+    /* NEU: Steuerungselemente für die Sichtbarkeit */
+    #controls-panel {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background-color: rgba(40, 40, 40, 0.8);
+        padding: 10px;
+        border-radius: 5px;
+        z-index: 20;
+    }
+    #controls-panel .form-check {
+        margin-bottom: 5px;
+    }
+    .form-check-input:checked {
+        background-color: var(--color-value);
+        border-color: var(--color-value);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="main-header">
+    <h1><i class="bi bi-bounding-box"></i> G-Code Vorschau: {{ gcode_file.filename }}</h1>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        Zugehöriger Drucker: <strong>{{ printer_name }}</strong> | Steuerung: Linke Maustaste zum Drehen, Rechte zum Verschieben, Mausrad zum Zoomen
+    </div>
+    <div id="viewer-container">
+        <div id="controls-panel" style="display: none;">
+            <div class="form-check form-switch" style="--color-value: #e74c3c;">
+                <input class="form-check-input" type="checkbox" role="switch" id="toggle-external_perimeter" data-type="external_perimeter" checked>
+                <label class="form-check-label" for="toggle-external_perimeter">Außenwand</label>
+            </div>
+            <div class="form-check form-switch" style="--color-value: #f1c40f;">
+                <input class="form-check-input" type="checkbox" role="switch" id="toggle-perimeter" data-type="perimeter" checked>
+                <label class="form-check-label" for="toggle-perimeter">Innenwände</label>
+            </div>
+            <div class="form-check form-switch" style="--color-value: #2ecc71;">
+                <input class="form-check-input" type="checkbox" role="switch" id="toggle-infill" data-type="infill" checked>
+                <label class="form-check-label" for="toggle-infill">Füllung (Infill)</label>
+            </div>
+             <div class="form-check form-switch" style="--color-value: #3498db;">
+                <input class="form-check-input" type="checkbox" role="switch" id="toggle-support" data-type="support" checked>
+                <label class="form-check-label" for="toggle-support">Stützmaterial</label>
+            </div>
+            <div class="form-check form-switch" style="--color-value: #9b59b6;">
+                <input class="form-check-input" type="checkbox" role="switch" id="toggle-skirt_brim" data-type="skirt_brim" checked>
+                <label class="form-check-label" for="toggle-skirt_brim">Skirt / Brim</label>
+            </div>
+            <div class="form-check form-switch" style="--color-value: #7f8c8d;">
+                <input class="form-check-input" type="checkbox" role="switch" id="toggle-travel" data-type="travel">
+                <label class="form-check-label" for="toggle-travel">Bewegungen</label>
+            </div>
+        </div>
+
+        <div id="loading-indicator">
+            <div class="spinner-border" role="status"></div>
+            <span class="ms-2">Lade & analysiere G-Code...</span>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // ... (Initialisierung von container, scene, camera, renderer etc. bleibt gleich) ...
+    const container = document.getElementById('viewer-container');
+    const loadingIndicator = document.getElementById('loading-indicator');
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    container.appendChild(renderer.domElement);
+    const controls = new OrbitControls(camera, renderer.domElement);
+    scene.background = new THREE.Color(0x282c34);
+    camera.position.set(100, 100, 150);
+    controls.update();
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+    scene.add(ambientLight);
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+    directionalLight.position.set(50, 200, 100);
+    scene.add(directionalLight);
+
+    // NEU: Ein Objekt, das die 3D-Objekte für jeden Typ speichert
+    const modelParts = {};
+
+    // NEU: Farben für die verschiedenen Typen definieren
+    const typeColors = {
+        "external_perimeter": 0xe74c3c, // Rot
+        "perimeter": 0xf1c40f,          // Gelb
+        "infill": 0x2ecc71,             // Grün
+        "support": 0x3498db,            // Blau
+        "skirt_brim": 0x9b59b6,         // Lila
+        "travel": 0x7f8c8d,             // Grau
+        "unknown": 0xecf0f1             // Weiß
+    };
+
+    fetch(`/visualizer/api/gcode_paths/{{ gcode_file.id }}`)
+        .then(response => response.json())
+        .then(pathData => {
+            const allPoints = [];
+            let hasContent = false;
+
+            // Iteriere durch die vom Parser zurückgegebenen Daten-Typen
+            for (const type in pathData) {
+                const paths = pathData[type];
+                if (!paths || paths.length === 0) continue;
+
+                hasContent = true;
+                const points = [];
+                paths.forEach(segment => {
+                    const start = new THREE.Vector3(segment[0][0], segment[0][2], segment[0][1]);
+                    const end = new THREE.Vector3(segment[1][0], segment[1][2], segment[1][1]);
+                    points.push(start, end);
+                    allPoints.push(start, end); // Sammle alle Punkte für die Zentrierung
+                });
+
+                const material = new THREE.LineBasicMaterial({ color: typeColors[type] || 0xffffff });
+                const geometry = new THREE.BufferGeometry().setFromPoints(points);
+                const line = new THREE.LineSegments(geometry, material);
+                
+                // Speichere das 3D-Objekt für späteren Zugriff
+                modelParts[type] = line;
+                scene.add(line);
+            }
+
+            if (!hasContent) {
+                loadingIndicator.innerHTML = `<i class="bi bi-exclamation-triangle-fill"></i> Keine druckbaren Bewegungen gefunden.`;
+                return;
+            }
+
+            // Zentriere das gesamte Modell basierend auf allen Punkten
+            const geometryAll = new THREE.BufferGeometry().setFromPoints(allPoints);
+            const boundingBox = new THREE.Box3().setFromBufferAttribute(geometryAll.attributes.position);
+            const center = new THREE.Vector3();
+            boundingBox.getCenter(center);
+            
+            // Verschiebe jedes einzelne Teil des Modells
+            for (const type in modelParts) {
+                modelParts[type].position.sub(center);
+            }
+
+            loadingIndicator.style.display = 'none';
+            document.getElementById('controls-panel').style.display = 'block'; // Zeige Bedienfeld
+
+        })
+        .catch(error => {
+            console.error("Fehler beim Laden der G-Code-Pfade:", error);
+            loadingIndicator.innerHTML = `<i class="bi bi-wifi-off"></i> Fehler beim Laden der 3D-Daten.`;
+        });
+    
+    // NEU: Event-Listener für die Checkboxen
+    document.querySelectorAll('#controls-panel .form-check-input').forEach(checkbox => {
+        checkbox.addEventListener('change', event => {
+            const type = event.target.dataset.type;
+            if (modelParts[type]) {
+                modelParts[type].visible = event.target.checked;
+            }
+        });
+    });
+
+    function animate() {
+        requestAnimationFrame(animate);
+        controls.update();
+        renderer.render(scene, camera);
+    }
+    animate();
+    
+    // Fenstergröße anpassen
+    window.addEventListener('resize', () => {
+        camera.aspect = container.clientWidth / container.clientHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(container.clientWidth, container.clientHeight);
+    });
+
+</script>
+{% endblock %}

@@ -1,0 +1,397 @@
+{% extends "base.html" %}
+
+{% block title %}{% if consumable %}Verbrauchsmaterial bearbeiten{% else %}Neues Verbrauchsmaterial{% endif %}{% endblock %}
+
+{% block head_extra %}
+<style>
+    .image-preview {
+        max-width: 300px;
+        max-height: 300px;
+        margin-top: 10px;
+        border-radius: 0.5rem;
+    }
+    .hazard-checkbox {
+        display: flex;
+        align-items: center;
+        padding: 0.5rem;
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 0.25rem;
+        margin-bottom: 0.5rem;
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+    .hazard-checkbox:hover {
+        background-color: rgba(255,255,255,0.05);
+    }
+    .hazard-symbol-preview {
+        width: 30px;
+        height: 30px;
+        margin-right: 10px;
+    }
+    .spec-row {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 10px;
+        align-items: center;
+    }
+    .spec-row input {
+        flex: 1;
+    }
+    .nav-tabs .nav-link {
+        color: #adb5bd;
+    }
+    .nav-tabs .nav-link.active {
+        background-color: #2d3236;
+        color: #fff;
+        border-color: #495057 #495057 #2d3236;
+    }
+    .tab-content {
+        background-color: #2d3236;
+        padding: 2rem;
+        border-radius: 0 0 0.5rem 0.5rem;
+        border: 1px solid #495057;
+        border-top: none;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="main-header">
+    <h1>
+        <i class="bi bi-box-seam"></i> 
+        {% if consumable %}Verbrauchsmaterial bearbeiten{% else %}Neues Verbrauchsmaterial{% endif %}
+    </h1>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <form method="POST" enctype="multipart/form-data">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            
+            <!-- Tab-Navigation -->
+            <ul class="nav nav-tabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="basic-tab" data-bs-toggle="tab" data-bs-target="#basic" type="button" role="tab">
+                        <i class="bi bi-info-circle"></i> Basis-Informationen
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="stock-tab" data-bs-toggle="tab" data-bs-target="#stock" type="button" role="tab">
+                        <i class="bi bi-box"></i> Lagerbestand
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="supplier-tab" data-bs-toggle="tab" data-bs-target="#supplier" type="button" role="tab">
+                        <i class="bi bi-building"></i> Lieferant
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="safety-tab" data-bs-toggle="tab" data-bs-target="#safety" type="button" role="tab">
+                        <i class="bi bi-exclamation-triangle"></i> Sicherheit
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="technical-tab" data-bs-toggle="tab" data-bs-target="#technical" type="button" role="tab">
+                        <i class="bi bi-gear"></i> Technische Daten
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="compatibility-tab" data-bs-toggle="tab" data-bs-target="#compatibility" type="button" role="tab">
+                        <i class="bi bi-printer"></i> Kompatibilität
+                    </button>
+                </li>
+            </ul>
+            
+            <!-- Tab-Inhalte -->
+            <div class="tab-content">
+                <!-- Basis-Informationen -->
+                <div class="tab-pane fade show active" id="basic" role="tabpanel">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="name" class="form-label">Name*</label>
+                            <input type="text" id="name" name="name" class="form-control" value="{{ consumable.name if consumable else '' }}" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="category" class="form-label">Kategorie*</label>
+                            <select id="category" name="category" class="form-select" required>
+                                {% for cat in categories %}
+                                <option value="{{ cat.name }}" {% if consumable and consumable.category == cat %}selected{% endif %}>
+                                    {{ cat.value }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-12 mb-3">
+                            <label for="description" class="form-label">Beschreibung</label>
+                            <textarea id="description" name="description" rows="3" class="form-control" placeholder="Ausführliche Beschreibung des Materials...">{{ consumable.description if consumable else '' }}</textarea>
+                        </div>
+                        <div class="col-12 mb-3">
+                            <label for="usage_description" class="form-label">Verwendungszweck</label>
+                            <textarea id="usage_description" name="usage_description" rows="2" class="form-control" placeholder="Wofür wird dieses Material verwendet?">{{ consumable.usage_description if consumable else '' }}</textarea>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="image" class="form-label">Produktbild</label>
+                            <input type="file" id="image" name="image" class="form-control" accept="image/*" onchange="previewImage(event)">
+                            <small class="text-muted">Erlaubte Formate: PNG, JPG, JPEG, GIF, WEBP (max. 5MB)</small>
+                            {% if consumable and consumable.image_url %}
+                            <div class="mt-2">
+                                <img src="{{ url_for('static', filename=consumable.image_url) }}" class="image-preview" id="current-image" alt="Aktuelles Bild">
+                            </div>
+                            {% endif %}
+                            <img id="image-preview" class="image-preview" style="display: none;" alt="Vorschau">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="datasheet_url" class="form-label">Datenblatt-URL</label>
+                            <input type="url" id="datasheet_url" name="datasheet_url" class="form-control" value="{{ consumable.datasheet_url if consumable else '' }}" placeholder="https://...">
+                            <small class="text-muted">Link zum Datenblatt oder zur Produktseite</small>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Lagerbestand -->
+                <div class="tab-pane fade" id="stock" role="tabpanel">
+                    <div class="row">
+                        <div class="col-md-3 mb-3">
+                            <label for="stock_level" class="form-label">Aktueller Bestand*</label>
+                            <input type="number" id="stock_level" name="stock_level" class="form-control" value="{{ consumable.stock_level if consumable else '0' }}" required min="0">
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label for="unit" class="form-label">Einheit*</label>
+                            <input type="text" id="unit" name="unit" class="form-control" value="{{ consumable.unit if consumable else 'Stück' }}" required>
+                            <small class="text-muted">z.B. Stück, kg, Liter, Meter</small>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label for="min_stock" class="form-label">Mindestbestand</label>
+                            <input type="number" id="min_stock" name="min_stock" class="form-control" value="{{ consumable.min_stock if consumable and consumable.min_stock else '' }}" min="0">
+                            <small class="text-muted">Kritische Untergrenze</small>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label for="max_stock" class="form-label">Maximalbestand</label>
+                            <input type="number" id="max_stock" name="max_stock" class="form-control" value="{{ consumable.max_stock if consumable and consumable.max_stock else '' }}" min="0">
+                            <small class="text-muted">Optimale Obergrenze</small>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="reorder_level" class="form-label">Nachbestellschwelle</label>
+                            <input type="number" id="reorder_level" name="reorder_level" class="form-control" value="{{ consumable.reorder_level if consumable and consumable.reorder_level else '' }}" min="0">
+                            <small class="text-muted">Bei Unterschreitung wird eine Warnung angezeigt</small>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="storage_location" class="form-label">Lagerort</label>
+                            <input type="text" id="storage_location" name="storage_location" class="form-control" value="{{ consumable.storage_location if consumable else '' }}" placeholder="z.B. Regal A3, Schrank 2">
+                        </div>
+                        <div class="col-md-12 mb-3">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="has_expiry" name="has_expiry" {% if consumable and consumable.has_expiry %}checked{% endif %} onchange="toggleExpiryDate()">
+                                <label class="form-check-label" for="has_expiry">
+                                    Material hat Verfallsdatum
+                                </label>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-3" id="expiry-date-field" style="display: {% if consumable and consumable.has_expiry %}block{% else %}none{% endif %};">
+                            <label for="expiry_date" class="form-label">Verfallsdatum</label>
+                            <input type="date" id="expiry_date" name="expiry_date" class="form-control" value="{{ consumable.expiry_date.strftime('%Y-%m-%d') if consumable and consumable.expiry_date else '' }}">
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Lieferant -->
+                <div class="tab-pane fade" id="supplier" role="tabpanel">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="manufacturer" class="form-label">Hersteller</label>
+                            <input type="text" id="manufacturer" name="manufacturer" class="form-control" value="{{ consumable.manufacturer if consumable else '' }}" placeholder="z.B. E3D, Bondtech">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="supplier" class="form-label">Lieferant</label>
+                            <input type="text" id="supplier" name="supplier" class="form-control" value="{{ consumable.supplier if consumable else '' }}" placeholder="z.B. Amazon, Conrad">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="article_number" class="form-label">Artikelnummer</label>
+                            <input type="text" id="article_number" name="article_number" class="form-control" value="{{ consumable.article_number if consumable else '' }}">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="ean" class="form-label">EAN / Barcode</label>
+                            <input type="text" id="ean" name="ean" class="form-control" value="{{ consumable.ean if consumable else '' }}" maxlength="13" placeholder="13-stellige EAN">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="unit_price" class="form-label">Preis pro Einheit</label>
+                            <input type="number" step="0.01" id="unit_price" name="unit_price" class="form-control" value="{{ consumable.unit_price if consumable and consumable.unit_price else '' }}" min="0">
+                        </div>
+                        <div class="col-md-2 mb-3">
+                            <label for="currency" class="form-label">Währung</label>
+                            <select id="currency" name="currency" class="form-select">
+                                <option value="EUR" {% if not consumable or consumable.currency == 'EUR' %}selected{% endif %}>EUR €</option>
+                                <option value="USD" {% if consumable and consumable.currency == 'USD' %}selected{% endif %}>USD $</option>
+                                <option value="GBP" {% if consumable and consumable.currency == 'GBP' %}selected{% endif %}>GBP £</option>
+                                <option value="CHF" {% if consumable and consumable.currency == 'CHF' %}selected{% endif %}>CHF</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="last_ordered_date" class="form-label">Letzte Bestellung</label>
+                            <input type="date" id="last_ordered_date" name="last_ordered_date" class="form-control" value="{{ consumable.last_ordered_date.strftime('%Y-%m-%d') if consumable and consumable.last_ordered_date else '' }}">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="last_order_quantity" class="form-label">Letzte Bestellmenge</label>
+                            <input type="number" id="last_order_quantity" name="last_order_quantity" class="form-control" value="{{ consumable.last_order_quantity if consumable and consumable.last_order_quantity else '' }}" min="0">
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Sicherheit -->
+                <div class="tab-pane fade" id="safety" role="tabpanel">
+                    <h5 class="mb-3"><i class="bi bi-exclamation-triangle-fill text-warning"></i> Gefahrensymbole (GHS)</h5>
+                    <p class="text-muted">Wählen Sie alle zutreffenden Gefahrensymbole aus:</p>
+                    <div class="row mb-4">
+                        {% for symbol in hazard_symbols %}
+                        <div class="col-md-6 mb-2">
+                            <label class="hazard-checkbox">
+                                <input class="form-check-input me-2" type="checkbox" id="hazard_{{ symbol.name }}" name="hazard_{{ symbol.name }}" 
+                                    {% if consumable and symbol.value in consumable.get_hazard_symbols_list() %}checked{% endif %}>
+                                <img src="{{ url_for('static', filename='hazard_symbols/' ~ symbol.name.split('_', 1)[0] ~ '.png') }}" 
+                                     class="hazard-symbol-preview" alt="{{ symbol.value }}"
+                                     onerror="this.style.display='none'">
+                                <span>{{ symbol.value }}</span>
+                            </label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    
+                    <h5 class="mb-3 mt-4"><i class="bi bi-shield-exclamation text-danger"></i> Sicherheitshinweise</h5>
+                    <textarea name="safety_warnings" rows="6" class="form-control" placeholder="Einen Sicherheitshinweis pro Zeile eingeben...&#10;Beispiel:&#10;Von Hitze fernhalten&#10;Schutzhandschuhe tragen&#10;Bei Berührung sofort abwaschen">{% if consumable and consumable.safety_warnings %}{{ consumable.get_safety_warnings_list() | join('\n') }}{% endif %}</textarea>
+                    <small class="text-muted">Jede Zeile wird als separate Warnung gespeichert</small>
+                </div>
+                
+                <!-- Technische Daten -->
+                <div class="tab-pane fade" id="technical" role="tabpanel">
+                    <h5 class="mb-3"><i class="bi bi-gear-fill"></i> Technische Spezifikationen</h5>
+                    <p class="text-muted">Fügen Sie beliebige technische Eigenschaften hinzu:</p>
+                    <div id="specifications-container">
+                        {% if consumable and consumable.get_specifications() %}
+                            {% for key, value in consumable.get_specifications().items() %}
+                            <div class="spec-row">
+                                <input type="text" name="spec_key[]" class="form-control" placeholder="Eigenschaft (z.B. Gewinde)" value="{{ key }}">
+                                <input type="text" name="spec_value[]" class="form-control" placeholder="Wert (z.B. M6)" value="{{ value }}">
+                                <button type="button" class="btn btn-danger" onclick="removeSpecRow(this)" title="Entfernen">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <div class="spec-row">
+                                <input type="text" name="spec_key[]" class="form-control" placeholder="Eigenschaft (z.B. Gewinde)">
+                                <input type="text" name="spec_value[]" class="form-control" placeholder="Wert (z.B. M6)">
+                                <button type="button" class="btn btn-danger" onclick="removeSpecRow(this)" title="Entfernen">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        {% endif %}
+                    </div>
+                    <button type="button" class="btn btn-secondary mt-2" onclick="addSpecRow()">
+                        <i class="bi bi-plus-lg"></i> Weitere Spezifikation hinzufügen
+                    </button>
+                </div>
+                
+                <!-- Kompatibilität -->
+                <div class="tab-pane fade" id="compatibility" role="tabpanel">
+                    <h5 class="mb-3"><i class="bi bi-printer-fill"></i> Kompatible Drucker</h5>
+                    <p class="text-muted">Wählen Sie alle Drucker aus, für die dieses Material geeignet ist:</p>
+                    {% if printers %}
+                    <div class="row">
+                        {% for printer in printers %}
+                        <div class="col-md-4 col-lg-3 mb-2">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="printer_ids" value="{{ printer.id }}" id="printer_{{ printer.id }}"
+                                    {% if consumable and printer in consumable.compatible_printers %}checked{% endif %}>
+                                <label class="form-check-label" for="printer_{{ printer.id }}">
+                                    {{ printer.name }}
+                                </label>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="alert alert-info">
+                        Keine Drucker vorhanden. <a href="{{ url_for('printers_bp.add_printer') }}">Jetzt Drucker hinzufügen</a>
+                    </div>
+                    {% endif %}
+                    
+                    <h5 class="mt-4 mb-3"><i class="bi bi-tags-fill"></i> Kompatibilitäts-Tags</h5>
+                    <input type="text" name="compatibility_tags" class="form-control" value="{{ consumable.compatibility_tags if consumable else '' }}" placeholder="z.B.: V6 Hotend, 0.4mm, M6, Messing">
+                    <small class="text-muted">Komma-getrennte Tags für erweiterte Filterung und Suche</small>
+                    
+                    <h5 class="mt-4 mb-3"><i class="bi bi-journal-text"></i> Notizen</h5>
+                    <textarea name="notes" rows="4" class="form-control" placeholder="Zusätzliche Hinweise, Besonderheiten, Erfahrungen...">{{ consumable.notes if consumable else '' }}</textarea>
+                </div>
+            </div>
+            
+            <div class="mt-4 d-flex gap-2">
+                <button type="submit" class="btn btn-primary btn-lg">
+                    <i class="bi bi-check-lg"></i> Speichern
+                </button>
+                <a href="{{ url_for('consumables_bp.list_consumables') }}" class="btn btn-secondary btn-lg">
+                    <i class="bi bi-x-lg"></i> Abbrechen
+                </a>
+                {% if consumable %}
+                <button type="button" class="btn btn-danger btn-lg ms-auto" 
+                        data-bs-toggle="modal"
+                        data-bs-target="#confirmDeleteModal"
+                        data-item-type="Verbrauchsmaterial"
+                        data-item-name="{{ consumable.name }}"
+                        data-form-action="{{ url_for('consumables_bp.delete_consumable', consumable_id=consumable.id) }}">
+                    <i class="bi bi-trash-fill"></i> Löschen
+                </button>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function previewImage(event) {
+    const preview = document.getElementById('image-preview');
+    const currentImage = document.getElementById('current-image');
+    const file = event.target.files[0];
+    
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            preview.src = e.target.result;
+            preview.style.display = 'block';
+            if (currentImage) currentImage.style.display = 'none';
+        }
+        reader.readAsDataURL(file);
+    }
+}
+
+function toggleExpiryDate() {
+    const checkbox = document.getElementById('has_expiry');
+    const field = document.getElementById('expiry-date-field');
+    field.style.display = checkbox.checked ? 'block' : 'none';
+}
+
+function addSpecRow() {
+    const container = document.getElementById('specifications-container');
+    const newRow = document.createElement('div');
+    newRow.className = 'spec-row';
+    newRow.innerHTML = `
+        <input type="text" name="spec_key[]" class="form-control" placeholder="Eigenschaft (z.B. Gewinde)">
+        <input type="text" name="spec_value[]" class="form-control" placeholder="Wert (z.B. M6)">
+        <button type="button" class="btn btn-danger" onclick="removeSpecRow(this)" title="Entfernen">
+            <i class="bi bi-trash"></i>
+        </button>
+    `;
+    container.appendChild(newRow);
+}
+
+function removeSpecRow(button) {
+    const container = document.getElementById('specifications-container');
+    if (container.children.length > 1) {
+        button.parentElement.remove();
+    } else {
+        alert('Mindestens eine Zeile muss vorhanden bleiben. Lassen Sie die Felder einfach leer, wenn Sie keine Spezifikationen angeben möchten.');
+    }
+}
+</script>
+{% endblock %}

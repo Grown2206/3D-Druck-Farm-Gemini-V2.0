@@ -1,0 +1,483 @@
+{% extends "base.html" %}
+{% block title %}Layout Editor{% endblock %}
+{% block page_title %}Layout Editor{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-lg-9">
+            <div id="scene-container" style="width: 100%; height: 80vh; background-color: #f0f0f0; position: relative; overflow: hidden;">
+                <div id="transform-controls-ui" class="position-absolute top-0 start-0 p-2" style="z-index: 10;">
+                    <div class="btn-group" role="group">
+                        <button type="button" class="btn btn-secondary btn-sm" data-mode="translate" title="Verschieben (W)">W</button>
+                        <button type="button" class="btn btn-secondary btn-sm" data-mode="rotate" title="Rotieren (E)">E</button>
+                        <button type="button" class="btn btn-secondary btn-sm" data-mode="scale" title="Skalieren (R)">R</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-3">
+            <div class="card mb-3">
+                <div class="card-header">Steuerung</div>
+                <div class="card-body">
+                    <p class="card-text"><small>
+                        - **Linke Maustaste + Ziehen:** Rotieren<br>
+                        - **Rechte Maustaste + Ziehen:** Verschieben<br>
+                        - **Mausrad:** Zoomen<br>
+                        - **Objekt anklicken:** Auswählen
+                    </small></p>
+                    <button id="save-layout-btn" class="btn btn-primary w-100 mb-2">Layout Speichern</button>
+                    <button id="add-item-btn" class="btn btn-success w-100" data-bs-toggle="modal" data-bs-target="#addItemModal">Neues Objekt</button>
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header">Objekte im Layout</div>
+                <div class="card-body" style="max-height: 200px; overflow-y: auto;">
+                    <ul class="list-group list-group-flush" id="layout-item-list">
+                        {% for item in items %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center" data-item-id="{{ item.id }}">
+                            <span class="item-name-display">{{ item.name }}</span>
+                            <button class="btn btn-sm btn-danger delete-item-from-list" data-item-id="{{ item.id }}">&times;</button>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">Eigenschaften</div>
+                <div class="card-body" id="properties-panel" style="display: none; max-height: 45vh; overflow-y: auto;">
+                    <form id="properties-form">
+                        <input type="hidden" id="selected-item-id">
+                        <div class="mb-3">
+                            <label for="item-name" class="form-label">Name</label>
+                            <input type="text" class="form-control" id="item-name" name="name">
+                        </div>
+                        <div class="mb-3">
+                            <label for="item-model-path" class="form-label">Modell</label>
+                            <input type="text" class="form-control" id="item-model-path" readonly disabled>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Position</label>
+                            <div class="input-group">
+                                <span class="input-group-text">X</span>
+                                <input type="number" step="0.1" class="form-control position-input" id="item-position-x">
+                                <span class="input-group-text">Y</span>
+                                <input type="number" step="0.1" class="form-control position-input" id="item-position-y">
+                                <span class="input-group-text">Z</span>
+                                <input type="number" step="0.1" class="form-control position-input" id="item-position-z">
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Rotation (Grad)</label>
+                            <div class="input-group">
+                                <span class="input-group-text">X</span>
+                                <input type="number" step="1" class="form-control rotation-input" id="item-rotation-x">
+                                <span class="input-group-text">Y</span>
+                                <input type="number" step="1" class="form-control rotation-input" id="item-rotation-y">
+                                <span class="input-group-text">Z</span>
+                                <input type="number" step="1" class="form-control rotation-input" id="item-rotation-z">
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Skalierung</label>
+                            <div class="input-group">
+                                <span class="input-group-text">X</span>
+                                <input type="number" step="0.01" class="form-control scale-input" id="item-scale-x">
+                                <span class="input-group-text">Y</span>
+                                <input type="number" step="0.01" class="form-control scale-input" id="item-scale-y">
+                                <span class="input-group-text">Z</span>
+                                <input type="number" step="0.01" class="form-control scale-input" id="item-scale-z">
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="item-color" class="form-label">Farbe</label>
+                            <input type="color" class="form-control form-control-color" id="item-color" name="color">
+                        </div>
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" id="keep-original-color">
+                            <label class="form-check-label" for="keep-original-color">Originalfarbe beibehalten</label>
+                        </div>
+                        <div class="mb-3">
+                            <label for="item-printer" class="form-label">Verknüpfter Drucker</label>
+                            <select class="form-select" id="item-printer" name="printer_id">
+                                <option value="None">Kein Drucker</option>
+                                {% for printer in printers %}
+                                <option value="{{ printer.id }}">{{ printer.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                         <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" id="item-visible" name="is_visible" checked>
+                            <label class="form-check-label" for="item-visible">Sichtbar</label>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">Änderungen anwenden</button>
+                    </form>
+                </div>
+                 <div class="card-body" id="no-selection-panel">
+                    <p class="text-muted">Kein Objekt ausgewählt.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="addItemModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Neues Objekt hinzufügen</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form id="add-item-form">
+        <div class="modal-body">
+            <div class="mb-3"><label for="new-item-name" class="form-label">Name</label><input type="text" class="form-control" id="new-item-name" name="name" required></div>
+            <div class="mb-3"><label for="new-item-type" class="form-label">Objekttyp</label><select class="form-select" id="new-item-type" name="item_type" required>{% for type in LayoutItemType %}<option value="{{ type.name }}">{{ type.value }}</option>{% endfor %}</select></div>
+            <div class="mb-3"><label for="new-item-model" class="form-label">Modelldatei</label><select class="form-select" id="new-item-model" name="model_path" required><option value="" disabled selected>Bitte auswählen...</option>{% for model in available_models %}<option value="{{ model }}">{{ model }}</option>{% endfor %}</select></div>
+            <div class="mb-3"><label for="new-item-color" class="form-label">Farbe (optional)</label><input type="color" class="form-control form-control-color" id="new-item-color" name="color" value="#cccccc"></div>
+             <div class="mb-3"><label for="new-item-printer" class="form-label">Verknüpfter Drucker (optional)</label><select class="form-select" id="new-item-printer" name="printer_id"><option value="">Kein Drucker</option>{% for printer in printers %}<option value="{{ printer.id }}">{{ printer.name }}</option>{% endfor %}</select></div>
+        </div>
+        <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button><button type="submit" class="btn btn-primary">Hinzufügen</button></div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+    import { TransformControls } from 'three/addons/controls/TransformControls.js';
+
+    // ... (der Rest des Scripts bleibt exakt gleich)
+    let scene, camera, renderer, orbitControls, transformControls;
+    const loader = new GLTFLoader();
+    const sceneObjects = new Map();
+    const originalMaterials = new Map();
+
+    function init() {
+        const container = document.getElementById('scene-container');
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xf0f0f0);
+
+        camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+        camera.position.set(5, 5, 5);
+        camera.up.set(0, 1, 0); 
+
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        container.appendChild(renderer.domElement);
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 1.5);
+        scene.add(ambientLight);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 2);
+        directionalLight.position.set(5, 10, 7.5);
+        scene.add(directionalLight);
+
+        orbitControls = new OrbitControls(camera, renderer.domElement);
+        orbitControls.enableDamping = true;
+
+        const gridHelper = new THREE.GridHelper(20, 20);
+        scene.add(gridHelper);
+        const axesHelper = new THREE.AxesHelper(2);
+        scene.add(axesHelper);
+
+        transformControls = new TransformControls(camera, renderer.domElement);
+        transformControls.addEventListener('dragging-changed', event => { orbitControls.enabled = !event.value; });
+        transformControls.addEventListener('objectChange', () => {
+            if (transformControls.object) {
+                const obj = transformControls.object;
+                if (transformControls.mode === 'translate') {
+                    document.getElementById('item-position-x').value = obj.position.x.toFixed(2);
+                    document.getElementById('item-position-y').value = obj.position.y.toFixed(2);
+                    document.getElementById('item-position-z').value = obj.position.z.toFixed(2);
+                } else if (transformControls.mode === 'scale') {
+                    document.getElementById('item-scale-x').value = obj.scale.x.toFixed(2);
+                    document.getElementById('item-scale-y').value = obj.scale.y.toFixed(2);
+                    document.getElementById('item-scale-z').value = obj.scale.z.toFixed(2);
+                } else if (transformControls.mode === 'rotate') {
+                    document.getElementById('item-rotation-x').value = THREE.MathUtils.radToDeg(obj.rotation.x).toFixed(1);
+                    document.getElementById('item-rotation-y').value = THREE.MathUtils.radToDeg(obj.rotation.y).toFixed(1);
+                    document.getElementById('item-rotation-z').value = THREE.MathUtils.radToDeg(obj.rotation.z).toFixed(1);
+                }
+            }
+        });
+        scene.add(transformControls);
+        
+        loadItems();
+        setupEventListeners();
+        animate();
+    }
+    
+    function onWindowResize() {
+        const container = document.getElementById('scene-container');
+        if (container) {
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        }
+    }
+
+    function applyColor(object, colorHex) {
+        const color = new THREE.Color(colorHex);
+        object.traverse(child => {
+            if (child.isMesh) {
+                if (!originalMaterials.has(child.uuid)) {
+                    originalMaterials.set(child.uuid, child.material);
+                }
+                child.material = child.material.clone();
+                child.material.color.set(color);
+            }
+        });
+    }
+    
+    function resetMaterial(object) {
+        object.traverse(child => {
+            if (child.isMesh && originalMaterials.has(child.uuid)) {
+                child.material = originalMaterials.get(child.uuid);
+            }
+        });
+    }
+
+    function loadAndSceneItem(item) {
+        const filename = item.model_path.split(/[\\\/]/).pop();
+        const correctedUrl = `/static/models/${filename}`;
+        loader.load(correctedUrl, (gltf) => {
+            const model = gltf.scene;
+            model.userData = { id: item.id, dbData: item };
+            model.position.set(item.position_x, item.position_y, item.position_z);
+            model.rotation.set(item.rotation_x, item.rotation_y, item.rotation_z);
+            model.scale.set(item.scale_x, item.scale_y, item.scale_z);
+            model.traverse(child => { if (child.isMesh) originalMaterials.set(child.uuid, child.material); });
+            if (item.color) applyColor(model, item.color);
+            model.visible = item.is_visible;
+            scene.add(model);
+            sceneObjects.set(item.id, model);
+        }, undefined, (error) => {
+            console.error(`Modell '${correctedUrl}' für Objekt ID ${item.id} konnte nicht geladen werden und wird übersprungen.`, error);
+            const listItem = document.querySelector(`#layout-item-list li[data-item-id="${item.id}"]`);
+            if(listItem) listItem.remove();
+        });
+    }
+
+    function loadItems() {
+        fetch('/layout-editor/items')
+            .then(response => response.json())
+            .then(items => items.forEach(loadAndSceneItem));
+    }
+    
+    function onClick(event) {
+        if (event.target.closest('#transform-controls-ui')) return;
+        const rect = renderer.domElement.getBoundingClientRect();
+        const mouse = new THREE.Vector2(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
+        const raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(mouse, camera);
+        const intersects = raycaster.intersectObjects(Array.from(sceneObjects.values()), true);
+        if (intersects.length > 0) {
+            let selectedObject = intersects[0].object;
+            while (selectedObject.parent && !selectedObject.userData.id) selectedObject = selectedObject.parent;
+            if (selectedObject.userData.id) {
+                transformControls.attach(selectedObject);
+                updatePropertiesPanel(selectedObject.userData.dbData);
+            }
+        } else {
+            transformControls.detach();
+            hidePropertiesPanel();
+        }
+    }
+    
+    function updatePropertiesPanel(itemData) {
+        document.getElementById('properties-panel').style.display = 'block';
+        document.getElementById('no-selection-panel').style.display = 'none';
+        
+        document.getElementById('selected-item-id').value = itemData.id;
+        document.getElementById('item-name').value = itemData.name;
+        document.getElementById('item-model-path').value = itemData.model_path.split(/[\\\/]/).pop();
+        
+        document.getElementById('item-position-x').value = itemData.position_x.toFixed(2);
+        document.getElementById('item-position-y').value = itemData.position_y.toFixed(2);
+        document.getElementById('item-position-z').value = itemData.position_z.toFixed(2);
+
+        document.getElementById('item-rotation-x').value = THREE.MathUtils.radToDeg(itemData.rotation_x).toFixed(1);
+        document.getElementById('item-rotation-y').value = THREE.MathUtils.radToDeg(itemData.rotation_y).toFixed(1);
+        document.getElementById('item-rotation-z').value = THREE.MathUtils.radToDeg(itemData.rotation_z).toFixed(1);
+
+        document.getElementById('item-scale-x').value = itemData.scale_x;
+        document.getElementById('item-scale-y').value = itemData.scale_y;
+        document.getElementById('item-scale-z').value = itemData.scale_z;
+        
+        document.getElementById('item-printer').value = itemData.printer_id || 'None';
+        document.getElementById('item-visible').checked = itemData.is_visible;
+        
+        const colorInput = document.getElementById('item-color');
+        const keepOriginalColorCheckbox = document.getElementById('keep-original-color');
+        if (itemData.color) {
+            colorInput.value = itemData.color;
+            colorInput.disabled = false;
+            keepOriginalColorCheckbox.checked = false;
+        } else {
+            colorInput.value = '#cccccc';
+            colorInput.disabled = true;
+            keepOriginalColorCheckbox.checked = true;
+        }
+    }
+    
+    function hidePropertiesPanel() {
+        document.getElementById('properties-panel').style.display = 'none';
+        document.getElementById('no-selection-panel').style.display = 'block';
+    }
+
+    function animate() {
+        requestAnimationFrame(animate);
+        orbitControls.update();
+        renderer.render(scene, camera);
+    }
+    
+    function deleteItem(itemId) {
+        if (!itemId || !confirm('Sind Sie sicher, dass Sie dieses Objekt löschen möchten?')) return;
+
+        fetch(`/layout-editor/item/${itemId}/delete`, { method: 'POST', headers: {'X-CSRFToken': '{{ csrf_token() }}'} })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                const sceneObject = sceneObjects.get(parseInt(itemId));
+                if (sceneObject) {
+                    transformControls.detach();
+                    hidePropertiesPanel();
+                    scene.remove(sceneObject);
+                    sceneObjects.delete(parseInt(itemId));
+                }
+                const listItem = document.querySelector(`#layout-item-list li[data-item-id="${itemId}"]`);
+                if(listItem) listItem.remove();
+                showToast('Erfolg', 'Objekt gelöscht.', 'success');
+            } else {
+                showToast('Fehler', data.message, 'danger');
+            }
+        });
+    }
+    
+    function setupEventListeners() {
+        window.addEventListener('resize', onWindowResize, false);
+        renderer.domElement.addEventListener('click', onClick, false);
+
+        document.getElementById('transform-controls-ui').addEventListener('click', (event) => {
+            const mode = event.target.dataset.mode;
+            if (mode) transformControls.setMode(mode);
+        });
+        window.addEventListener('keydown', (event) => {
+            switch (event.key.toLowerCase()) {
+                case 'w': transformControls.setMode('translate'); break;
+                case 'e': transformControls.setMode('rotate'); break;
+                case 'r': transformControls.setMode('scale'); break;
+            }
+        });
+
+        document.getElementById('save-layout-btn').addEventListener('click', () => {
+             const layoutData = [];
+            sceneObjects.forEach((obj, id) => {
+                layoutData.push({
+                    id: id,
+                    position: { x: obj.position.x, y: obj.position.y, z: obj.position.z },
+                    rotation: { x: obj.rotation.x, y: obj.rotation.y, z: obj.rotation.z },
+                    scale: { x: obj.scale.x, y: obj.scale.y, z: obj.scale.z }
+                });
+            });
+            fetch('/layout-editor/save', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}' }, body: JSON.stringify(layoutData) })
+            .then(r => r.json()).then(d => d.status === 'success' ? showToast('Erfolg', d.message, 'success') : showToast('Fehler', d.message, 'danger'));
+        });
+
+        document.getElementById('add-item-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            const modal = bootstrap.Modal.getInstance(document.getElementById('addItemModal'));
+            fetch('/layout-editor/item/add', { method: 'POST', headers: {'X-CSRFToken': '{{ csrf_token() }}'}, body: formData })
+            .then(response => response.json()).then(data => {
+                if (data.status === 'success') {
+                    modal.hide();
+                    loadAndSceneItem(data.item);
+                    const list = document.getElementById('layout-item-list');
+                    const listItem = document.createElement('li');
+                    listItem.className = 'list-group-item d-flex justify-content-between align-items-center';
+                    listItem.dataset.itemId = data.item.id;
+                    listItem.innerHTML = `<span class="item-name-display">${data.item.name}</span> <button class="btn btn-sm btn-danger delete-item-from-list" data-item-id="${data.item.id}">&times;</button>`;
+                    list.appendChild(listItem);
+                    showToast('Erfolg', 'Objekt hinzugefügt.', 'success');
+                    this.reset();
+                } else {
+                    showToast('Fehler', data.message, 'danger');
+                }
+            });
+        });
+        
+        document.getElementById('properties-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const itemId = document.getElementById('selected-item-id').value;
+            if (!itemId) return;
+            const formData = new FormData();
+            formData.append('name', document.getElementById('item-name').value);
+            formData.append('printer_id', document.getElementById('item-printer').value);
+            formData.append('is_visible', document.getElementById('item-visible').checked ? 'on' : 'off');
+            formData.append('color', document.getElementById('keep-original-color').checked ? '' : document.getElementById('item-color').value);
+            
+            fetch(`/layout-editor/item/${itemId}/update`, { method: 'POST', headers: {'X-CSRFToken': '{{ csrf_token() }}'}, body: formData })
+            .then(r => r.json()).then(data => {
+                if (data.status === 'success') {
+                    const sceneObject = sceneObjects.get(parseInt(itemId));
+                    sceneObject.userData.dbData = { ...sceneObject.userData.dbData, ...data.item };
+                    const listItem = document.querySelector(`#layout-item-list li[data-item-id="${itemId}"] .item-name-display`);
+                    if(listItem) listItem.textContent = data.item.name;
+                    showToast('Erfolg', 'Eigenschaften aktualisiert.', 'success');
+                } else { showToast('Fehler', data.message, 'danger'); }
+            });
+        });
+
+        ['.position-input', '.rotation-input', '.scale-input'].forEach(selector => {
+            document.querySelectorAll(selector).forEach(input => {
+                input.addEventListener('input', () => {
+                    const itemId = document.getElementById('selected-item-id').value;
+                    if (!itemId) return;
+                    const sceneObject = sceneObjects.get(parseInt(itemId));
+                    if (!sceneObject) return;
+
+                    const posX = parseFloat(document.getElementById('item-position-x').value);
+                    const posY = parseFloat(document.getElementById('item-position-y').value);
+                    const posZ = parseFloat(document.getElementById('item-position-z').value);
+                    sceneObject.position.set(posX, posY, posZ);
+
+                    const rotX = THREE.MathUtils.degToRad(parseFloat(document.getElementById('item-rotation-x').value));
+                    const rotY = THREE.MathUtils.degToRad(parseFloat(document.getElementById('item-rotation-y').value));
+                    const rotZ = THREE.MathUtils.degToRad(parseFloat(document.getElementById('item-rotation-z').value));
+                    sceneObject.rotation.set(rotX, rotY, rotZ);
+
+                    const scaleX = parseFloat(document.getElementById('item-scale-x').value);
+                    const scaleY = parseFloat(document.getElementById('item-scale-y').value);
+                    const scaleZ = parseFloat(document.getElementById('item-scale-z').value);
+                    sceneObject.scale.set(scaleX, scaleY, scaleZ);
+                });
+            });
+        });
+        
+        document.getElementById('layout-item-list').addEventListener('click', function(e) {
+            if (e.target && e.target.classList.contains('delete-item-from-list')) {
+                const itemId = e.target.dataset.itemId;
+                deleteItem(itemId);
+            }
+        });
+        
+        document.getElementById('keep-original-color').addEventListener('change', function() {
+            document.getElementById('item-color').disabled = this.checked;
+        });
+    }
+
+    init();
+</script>
+{% endblock %}

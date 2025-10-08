@@ -1,0 +1,79 @@
+<form action="{{ url_for('printers_bp.add_maintenance_log', printer_id=printer.id) }}" method="POST" id="maintenance-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+    
+    <div class="card mt-4">
+        <div class="card-header">
+            <h5 class="mb-0">Wartungs-Checkliste & Protokollierung</h5>
+        </div>
+        <div class="card-body">
+            <p class="card-text text-muted">Haken Sie die erledigten Aufgaben ab, fügen Sie Notizen hinzu und erstellen Sie mit einem Klick einen Protokolleintrag.</p>
+            
+            {% set checklist_state = printer.maintenance_checklist_state or {} %}
+
+            <h6 class="mt-4">Wöchentlich oder alle 50 Druckstunden</h6>
+            <ul class="list-group">
+                <li class="list-group-item">
+                    <input class="form-check-input me-2" type="checkbox" name="check-belts" id="check-belts" {% if checklist_state.get('check-belts') %}checked{% endif %}>
+                    <label class="form-check-label stretched-link" for="check-belts">Riemenspannung prüfen (X- und Y-Achse)</label>
+                </li>
+                <li class="list-group-item">
+                    <input class="form-check-input me-2" type="checkbox" name="check-screws" id="check-screws" {% if checklist_state.get('check-screws') %}checked{% endif %}>
+                    <label class="form-check-label stretched-link" for="check-screws">Sichtprüfung: Schrauben auf festen Sitz kontrollieren</label>
+                </li>
+                 <li class="list-group-item">
+                    <input class="form-check-input me-2" type="checkbox" name="check-lubrication" id="check-lubrication" {% if checklist_state.get('check-lubrication') %}checked{% endif %}>
+                    <label class="form-check-label stretched-link" for="check-lubrication">Z-Achsen-Spindeln und Führungsstangen prüfen und ggf. schmieren</label>
+                </li>
+            </ul>
+
+            <h6 class="mt-4">Monatlich oder alle 200 Druckstunden</h6>
+            <ul class="list-group">
+                <li class="list-group-item">
+                    <input class="form-check-input me-2" type="checkbox" name="check-fans" id="check-fans" {% if checklist_state.get('check-fans') %}checked{% endif %}>
+                    <label class="form-check-label stretched-link" for="check-fans">Lüfter (Bauteil, Hotend, Netzteil) auf Staub prüfen und reinigen</label>
+                </li>
+                <li class="list-group-item">
+                    <input class="form-check-input me-2" type="checkbox" name="check-ptfe" id="check-ptfe" {% if checklist_state.get('check-ptfe') %}checked{% endif %}>
+                    <label class="form-check-label stretched-link" for="check-ptfe">PTFE-Schlauch (Bowden/Inliner) auf Abnutzung prüfen</label>
+                </li>
+                <li class="list-group-item">
+                    <input class="form-check-input me-2" type="checkbox" name="check-calibration" id="check-calibration" {% if checklist_state.get('check-calibration') %}checked{% endif %}>
+                    <label class="form-check-label stretched-link" for="check-calibration">Kalibrierung durchführen (PID, E-Steps, etc.)</label>
+                </li>
+                 <li class="list-group-item">
+                    <input class="form-check-input me-2" type="checkbox" name="check-nozzle" id="check-nozzle" {% if checklist_state.get('check-nozzle') %}checked{% endif %}>
+                    <label class="form-check-label stretched-link" for="check-nozzle">Düse gewechselt</label>
+                </li>
+            </ul>
+
+            <div class="mt-4">
+                <label for="maintenance-notes" class="form-label"><strong>Zusätzliche Notizen</strong></label>
+                <textarea id="maintenance-notes" name="notes" class="form-control" rows="3" placeholder="Details zur Wartung, getauschte Teile, besondere Vorkommnisse..."></textarea>
+            </div>
+        </div>
+        <div class="card-footer d-flex justify-content-between align-items-center">
+            <button type="button" class="btn btn-secondary" id="reset-checklist-btn"><i class="bi bi-arrow-counterclockwise"></i> Haken zurücksetzen</button>
+            <button type="submit" class="btn btn-success"><i class="bi bi-journal-plus"></i> Protokoll-Eintrag erstellen & Checkliste speichern</button>
+        </div>
+    </div>
+</form>
+
+<h4 class="mt-4">Wartungsverlauf</h4>
+{% if maintenance_logs %}
+<ul class="list-group">
+    {% for log in maintenance_logs %}
+    <li class="list-group-item">
+        <div class="d-flex w-100 justify-content-between">
+            <h6 class="mb-1"><strong>{{ log.task_type.value }}</strong></h6>
+            <small class="text-muted">{{ log.timestamp.strftime('%d.%m.%Y %H:%M') }}</small>
+        </div>
+        <p class="mb-1" style="white-space: pre-wrap;">{{ log.notes or 'Keine Notizen.' }}</p>
+        <small class="text-muted">Durchgeführt von: {{ log.user.username }}</small>
+    </li>
+    {% endfor %}
+</ul>
+{% else %}
+<div class="alert alert-info mt-3">
+    Für diesen Drucker sind keine Wartungsprotokolle vorhanden.
+</div>
+{% endif %}

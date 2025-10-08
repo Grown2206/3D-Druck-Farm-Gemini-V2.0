@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KPI-Dashboard: Auftrags- & Prozessanalyse</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f2f5;
+        }
+        .kpi-card {
+            background-color: white;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+        }
+        .kpi-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -2px rgb(0 0 0 / 0.1);
+        }
+        .chart-container {
+            position: relative;
+            height: 300px;
+            width: 100%;
+        }
+        .process-step {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            background-color: #e0e7ff;
+            color: #3730a3;
+            font-weight: 600;
+            min-height: 80px;
+        }
+        .process-arrow {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            color: #6b7280;
+        }
+    </style>
+</head>
+<body class="p-4 sm:p-6 lg:p-8">
+    <div class="max-w-full mx-auto">
+        <header class="mb-6">
+            <h1 class="text-3xl font-bold text-gray-800">KPI-Dashboard</h1>
+            <p class="text-gray-500 mt-1">Detaillierte Analyse von Aufträgen, Prozessen und Lagerbeständen</p>
+            <div class="border-b border-gray-200 mt-4">
+                <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+                    <a href="#" class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Farm-Übersicht</a>
+                    <a href="#" class="border-indigo-500 text-indigo-600 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" aria-current="page">Auftrags- & Prozessanalyse</a>
+                </nav>
+            </div>
+        </header>
+
+        <main class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            
+            <div class="kpi-card p-5 col-span-1 flex flex-col justify-center items-center">
+                <h3 class="text-sm font-medium text-gray-500 truncate">Ø Durchlaufzeit</h3>
+                <p class="mt-1 text-4xl font-semibold text-indigo-600">8h 22m</p>
+                <p class="text-xs text-green-500">+3.2% vs. Vormonat</p>
+            </div>
+
+            <div class="kpi-card p-5 col-span-1 flex flex-col justify-center items-center">
+                <h3 class="text-sm font-medium text-gray-500 truncate">OEE (Gesamtanlageneffektivität)</h3>
+                <p class="mt-1 text-4xl font-semibold text-indigo-600">78.5%</p>
+                <p class="text-xs text-red-500">-1.5% vs. Vormonat</p>
+            </div>
+
+            <div class="kpi-card p-5 col-span-1 flex flex-col justify-center items-center">
+                <h3 class="text-sm font-medium text-gray-500 truncate">First Pass Yield (Ersterfolg)</h3>
+                <p class="mt-1 text-4xl font-semibold text-indigo-600">96.2%</p>
+                <p class="text-xs text-green-500">+0.8% vs. Vormonat</p>
+            </div>
+
+            <div class="kpi-card p-5 col-span-1 flex flex-col justify-center items-center">
+                <h3 class="text-sm font-medium text-gray-500 truncate">Termintreue (On-Time Delivery)</h3>
+                <p class="mt-1 text-4xl font-semibold text-indigo-600">98.9%</p>
+                 <p class="text-xs text-green-500">+0.1% vs. Vormonat</p>
+            </div>
+
+            <div class="kpi-card p-6 md:col-span-2 lg:col-span-4">
+                <h3 class="text-lg font-medium text-gray-800">Analyse des Auftragslebenszyklus (Letzte 10 Aufträge)</h3>
+                <p class="text-sm text-gray-500 mb-4">Zusammensetzung der Durchlaufzeit aus Warte-, Rüst-, Druck- und Nachbearbeitungszeit.</p>
+                <div class="chart-container h-80">
+                    <canvas id="leadTimeChart"></canvas>
+                </div>
+            </div>
+
+            <div class="kpi-card p-6 lg:col-span-2">
+                <h3 class="text-lg font-medium text-gray-800">Fehlerursachen-Analyse</h3>
+                 <p class="text-sm text-gray-500 mb-4">Verteilung der häufigsten Gründe für fehlgeschlagene Druckaufträge im letzten Quartal.</p>
+                <div class="chart-container">
+                    <canvas id="failureReasonChart"></canvas>
+                </div>
+            </div>
+
+            <div class="kpi-card p-6 lg:col-span-2">
+                <h3 class="text-lg font-medium text-gray-800">Drucker-Performance: Erfolgsquote</h3>
+                <p class="text-sm text-gray-500 mb-4">Vergleich der Erfolgsquoten aller aktiven Drucker in den letzten 30 Tagen.</p>
+                <div class="chart-container">
+                    <canvas id="printerPerformanceChart"></canvas>
+                </div>
+            </div>
+
+            <div class="kpi-card p-6 md:col-span-2 lg:col-span-4">
+                 <h3 class="text-lg font-medium text-gray-800 mb-4">Standard-Prozessfluss für Druckaufträge</h3>
+                <div class="grid grid-cols-9 gap-2 items-center">
+                    <div class="process-step col-span-2 md:col-span-1">Auftragseingang</div>
+                    <div class="process-arrow col-span-1 hidden md:flex">→</div>
+                    <div class="process-step col-span-2 md:col-span-1">Arbeits-vorbereitung</div>
+                    <div class="process-arrow col-span-1 hidden md:flex">→</div>
+                    <div class="process-step col-span-2 md:col-span-1">Warte-schlange</div>
+                     <div class="process-arrow col-span-1 hidden md:flex">→</div>
+                    <div class="process-step col-span-2 md:col-span-1">Druck-prozess</div>
+                    <div class="process-arrow col-span-1 hidden md:flex">→</div>
+                    <div class="process-step col-span-2 md:col-span-1">Qualitäts-kontrolle</div>
+                    <div class="process-arrow col-span-1 hidden md:flex">→</div>
+                    <div class="process-step col-span-2 md:col-span-1">Nach-bearbeitung</div>
+                    <div class="process-arrow col-span-1 hidden md:flex">→</div>
+                    <div class="process-step col-span-2 md:col-span-1">Versand</div>
+                </div>
+            </div>
+            
+            <div class="kpi-card p-6 lg:col-span-2">
+                <h3 class="text-lg font-medium text-gray-800">Auslastungstrend der Druckfarm</h3>
+                <p class="text-sm text-gray-500 mb-4">Prozentuale Auslastung der gesamten verfügbaren Maschinenzeit (letzte 30 Tage).</p>
+                <div class="chart-container">
+                    <canvas id="utilizationChart"></canvas>
+                </div>
+            </div>
+
+            <div class="kpi-card p-6 lg:col-span-2">
+                <h3 class="text-lg font-medium text-gray-800">Backlog-Entwicklung</h3>
+                <p class="text-sm text-gray-500 mb-4">Anzahl der Aufträge in der Warteschlange im Zeitverlauf.</p>
+                <div class="chart-container">
+                    <canvas id="backlogChart"></canvas>
+                </div>
+            </div>
+
+            <div class="kpi-card p-6 md:col-span-2 lg:col-span-4">
+                <h3 class="text-lg font-medium text-gray-800">Filament-Lagerbestand vs. Meldebestand</h3>
+                <p class="text-sm text-gray-500 mb-4">Aktueller Lagerbestand kritischer Materialien im Vergleich zum definierten Mindestbestand für die Nachbestellung.</p>
+                <div class="chart-container h-80">
+                    <canvas id="inventoryChart"></canvas>
+                </div>
+            </div>
+
+            <div class="kpi-card p-6 lg:col-span-2">
+                <h3 class="text-lg font-medium text-gray-800">Lager-Reichweite (Days of Supply)</h3>
+                <p class="text-sm text-gray-500 mb-4">Voraussichtliche Reichweite des Lagerbestands in Tagen basierend auf dem Durchschnittsverbrauch.</p>
+                <div class="chart-container">
+                    <canvas id="daysOfSupplyChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="kpi-card p-6 lg:col-span-2">
+                <h3 class="text-lg font-medium text-gray-800">Materialverbrauch-Trend (Top 5)</h3>
+                <p class="text-sm text-gray-500 mb-4">Verbrauch der fünf meistgenutzten Filamente in Gramm über die letzten 6 Monate.</p>
+                <div class="chart-container">
+                    <canvas id="materialConsumptionChart"></canvas>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            
+            const tooltipTitleCallback = {
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            title: function(tooltipItems) {
+                                const item = tooltipItems[0];
+                                let label = item.chart.data.labels[item.dataIndex];
+                                if (Array.isArray(label)) {
+                                  return label.join(' ');
+                                } else {
+                                  return label;
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
+            const wrapLabel = (label) => {
+                const maxLength = 16;
+                if (label.length <= maxLength) return label;
+                
+                const words = label.split(' ');
+                const lines = [];
+                let currentLine = '';
+
+                words.forEach(word => {
+                    if ((currentLine + ' ' + word).length > maxLength) {
+                        lines.push(currentLine.trim());
+                        currentLine = word;
+                    } else {
+                        currentLine += ' ' + word;
+                    }
+                });
+                lines.push(currentLine.trim());
+                return lines.filter(line => line);
+            };
+
+            const primaryColor = '#4f46e5';
+            const secondaryColor = '#ec4899';
+            const tertiaryColor = '#f59e0b';
+            const infoColor = '#3b82f6';
+            const successColor = '#22c55e';
+            const warningColor = '#f97316';
+            const errorColor = '#ef4444';
+            const grayColor = '#6b7280';
+            
+            const colorPalette = [primaryColor, secondaryColor, tertiaryColor, infoColor, successColor, warningColor, errorColor, '#8b5cf6', '#10b981'];
+
+
+            new Chart(document.getElementById('leadTimeChart'), {
+                type: 'bar',
+                data: {
+                    labels: Array.from({length: 10}, (_, i) => `AUF-2025-${12345 + i}`),
+                    datasets: [
+                        { label: 'Wartezeit', data: Array.from({length: 10}, () => Math.random() * 2 + 0.5), backgroundColor: grayColor, },
+                        { label: 'Rüstzeit', data: Array.from({length: 10}, () => Math.random() * 1 + 0.2), backgroundColor: infoColor, },
+                        { label: 'Druckzeit', data: Array.from({length: 10}, () => Math.random() * 8 + 2), backgroundColor: primaryColor, },
+                        { label: 'Nachbearbeitung', data: Array.from({length: 10}, () => Math.random() * 1.5 + 0.3), backgroundColor: secondaryColor, }
+                    ]
+                },
+                options: {
+                    ...tooltipTitleCallback,
+                    responsive: true, maintainAspectRatio: false,
+                    scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, title: { display: true, text: 'Stunden' } } }
+                }
+            });
+
+            new Chart(document.getElementById('failureReasonChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: ['Warping / Haftung', 'Layer Shift', 'Verstopfte Düse', 'Unterextrusion', 'Stringing', 'Sonstiges'],
+                    datasets: [{
+                        data: [35, 25, 18, 12, 7, 3],
+                        backgroundColor: colorPalette,
+                        hoverOffset: 4
+                    }]
+                },
+                options: { ...tooltipTitleCallback, responsive: true, maintainAspectRatio: false }
+            });
+
+            new Chart(document.getElementById('printerPerformanceChart'), {
+                type: 'bar',
+                data: {
+                    labels: ['Prusa MK4 #1', 'Bambu Lab X1C #1', 'Prusa MK4 #2', 'Creality K1', 'UltiMaker S5', 'Bambu Lab X1C #2'],
+                    datasets: [{
+                        label: 'Erfolgsquote in %',
+                        data: [98.5, 99.1, 97.2, 92.4, 98.8, 99.3],
+                        backgroundColor: colorPalette,
+                    }]
+                },
+                options: {
+                    ...tooltipTitleCallback,
+                    indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+                    scales: { x: { beginAtZero: true, max: 100, title: { display: true, text: 'Erfolgsquote (%)' } } },
+                    plugins: { legend: { display: false } }
+                }
+            });
+
+            new Chart(document.getElementById('utilizationChart'), {
+                type: 'line',
+                data: {
+                    labels: Array.from({length: 30}, (_, i) => `${i + 1} Tag`),
+                    datasets: [{
+                        label: 'Auslastung',
+                        data: Array.from({length: 30}, () => Math.random() * 30 + 55),
+                        borderColor: primaryColor,
+                        backgroundColor: primaryColor + '33',
+                        fill: true, tension: 0.3
+                    }]
+                },
+                options: {
+                    ...tooltipTitleCallback,
+                    responsive: true, maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true, max: 100, title: { display: true, text: 'Auslastung in %' } } },
+                    plugins: { legend: { display: false } }
+                }
+            });
+
+            new Chart(document.getElementById('backlogChart'), {
+                type: 'line',
+                data: {
+                    labels: Array.from({length: 30}, (_, i) => `${i + 1} Tag`),
+                    datasets: [{
+                        label: 'Anzahl Aufträge',
+                        data: [25, 28, 22, 30, 35, 40, 38, 33, 29, 31, 42, 45, 50, 48, 44, 40, 38, 41, 47, 55, 52, 49, 45, 48, 58, 62, 59, 55, 60, 65],
+                        borderColor: secondaryColor,
+                        backgroundColor: secondaryColor + '33',
+                        fill: true, tension: 0.3, steppped: false
+                    }]
+                },
+                options: {
+                    ...tooltipTitleCallback,
+                    responsive: true, maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true, title: { display: true, text: 'Aufträge in Warteschlange' } } },
+                    plugins: { legend: { display: false } }
+                }
+            });
+
+            new Chart(document.getElementById('inventoryChart'), {
+                type: 'bar',
+                data: {
+                    labels: ['PLA Schwarz', 'PETG Weiß', 'ASA Grau', 'TPU Flexibel 95A', 'PC-CF Schwarz'].map(wrapLabel),
+                    datasets: [
+                        { label: 'Lagerbestand (g)', data: [12500, 8200, 3100, 1800, 4500], backgroundColor: primaryColor, order: 2 },
+                        { label: 'Meldebestand (g)', data: [10000, 10000, 5000, 2000, 5000], borderColor: errorColor, borderWidth: 2, type: 'line', fill: false, pointRadius: 0, order: 1 }
+                    ]
+                },
+                options: {
+                    ...tooltipTitleCallback,
+                    responsive: true, maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true, title: { display: true, text: 'Gewicht in Gramm' } } }
+                }
+            });
+
+            new Chart(document.getElementById('daysOfSupplyChart'), {
+                type: 'bar',
+                data: {
+                    labels: ['PLA Schwarz', 'PETG Weiß', 'ASA Grau', 'TPU Flexibel', 'PC-CF Schwarz'].map(wrapLabel),
+                    datasets: [{
+                        label: 'Reichweite in Tagen',
+                        data: [45, 32, 15, 28, 22],
+                        backgroundColor: (context) => context.raw < 20 ? warningColor : successColor,
+                    }]
+                },
+                options: {
+                    ...tooltipTitleCallback,
+                    indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { x: { beginAtZero: true, title: { display: true, text: 'Tage' } } }
+                }
+            });
+
+            new Chart(document.getElementById('materialConsumptionChart'), {
+                type: 'line',
+                data: {
+                    labels: ['April', 'Mai', 'Juni', 'Juli', 'August', 'September'],
+                    datasets: [
+                        { label: 'PLA Schwarz', data: [25, 28, 35, 40, 42, 50], borderColor: colorPalette[0], fill: false, tension: 0.3},
+                        { label: 'PETG Weiß', data: [18, 22, 28, 32, 35, 41], borderColor: colorPalette[1], fill: false, tension: 0.3},
+                        { label: 'ASA Grau', data: [10, 12, 15, 14, 18, 22], borderColor: colorPalette[2], fill: false, tension: 0.3},
+                        { label: 'ABS Natur', data: [8, 9, 11, 10, 13, 15], borderColor: colorPalette[3], fill: false, tension: 0.3},
+                        { label: 'TPU 95A', data: [5, 6, 8, 9, 10, 12], borderColor: colorPalette[4], fill: false, tension: 0.3},
+                    ]
+                },
+                options: {
+                    ...tooltipTitleCallback,
+                    responsive: true, maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true, title: { display: true, text: 'Verbrauch in kg' } } }
+                }
+            });
+
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,78 @@
+name;target_quantity_parts;material_number;material_short_text;priority;estimated_end_date;gcode_filename
+Test-Auftrag-Unterteil;10;M-101;Purple;1;30.09.2025;222f8100a49c30f7_Test_Snapmaker.gcode
+Test 3;5;M-102;PLA High Speed;2;02.10.2025;f11385310d210f66_300x300_Snapmaker.gcode
+Test-Auftrag-C9F8G7;50;M-103;PLA High Speed;3;05.10.2025;7e6aa2b554fa10ff_bd3c2b382ddb0ef3_eyes-black_Snapmaker.gcode
+Test-Auftrag-Augen;25;M-104;PolyLite PC Transparent;2;07.10.2025;222f8100a49c30f7_Test_Snapmaker.gcode
+Test-Auftrag-E1A2B3;150;MAT-005;PLA High Speed;3;10.10.2025;222f8100a49c30f7_Test_Snapmaker.gcode
+Test-Auftrag-B3C2E4;25;MAT-006;PLA High Speed;5;12.10.2025;4f416865992ba50a_10x10x0.2_Snapmaker.gcode
+Test-Auftrag-D4E5F6;220;MAT-007;PolyLite PC Transparent;1;15.10.2025;3fb57d34a0061a62_e775df7da0329dbe_chrome-strips-parts_Snapmaker.gcode
+Test-Auftrag-Unterteil;78;MAT-008;NX2;2;17.10.2025;222f8100a49c30f7_Test_Snapmaker.gcode
+Test-Auftrag-C9F8G7;12;MAT-005;PLA High Speed;4;20.10.2025;7e6aa2b554fa10ff_bd3c2b382ddb0ef3_eyes-black_Snapmaker.gcode
+Test-Auftrag-Chromleisten;180;MAT-006;PLA High Speed;3;22.10.2025;3fb57d34a0061a62_e775df7da0329dbe_chrome-strips-parts_Snapmaker.gcode
+Test-Auftrag-F6G7H8;10;M-101;PolyLite PC Transparent;1;30.09.2025;222f8100a49c30f7_Test_Snapmaker.gcode
+Test-Auftrag-Wuerfel;5;M-102;NX2;2;02.10.2025;222f8100a49c30f7_Test_Snapmaker.gcode
+Test-Auftrag-E1A2B3;50;M-103;NX2/white ;3;05.10.2025;7e6aa2b554fa10ff_bd3c2b382ddb0ef3_eyes-black_Snapmaker.gcode
+Test-Auftrag-B3C2E4;25;M-104;PolyLite PC Transparent;2;07.10.2025;58c695586684d8aa_3656ec78295aeef6_Charizard_Low_Poly_Snapmaker.gcode
+Test-Auftrag-A8D3F1;150;MAT-005;NX2;3;10.10.2025;cfc8c147a7153ad4_Unterteil_080925_Snapmaker.gcode
+Test-Auftrag-Augen;25;MAT-006;NX2/white ;5;12.10.2025;7e6aa2b554fa10ff_bd3c2b382ddb0ef3_eyes-black_Snapmaker.gcode
+Test-Auftrag-Unterteil;220;MAT-007;Purple;1;15.10.2025;3fb57d34a0061a62_e775df7da0329dbe_chrome-strips-parts_Snapmaker.gcode
+Test-Auftrag-C9F8G7;78;MAT-008;NX2;2;17.10.2025;7e6aa2b554fa10ff_bd3c2b382ddb0ef3_eyes-black_Snapmaker.gcode
+Test-Auftrag-D4E5F6;12;MAT-005;PolyLite PC Transparent;4;20.10.2025;222f8100a49c30f7_Test_Snapmaker.gcode
+Test-Auftrag-A8D3F1;10;M-101;NX2;1;30.09.2025;cfc8c147a7153ad4_Unterteil_080925_Snapmaker.gcode
+Test-Auftrag-Wuerfel;5;M-102;NX2;2;02.10.2025;222f8100a49c30f7_Test_Snapmaker.gcode
+Test-Auftrag-Unterteil;50;M-103;PLA High Speed;3;05.10.2025;cfc8c147a7153ad4_Unterteil_080925_Snapmaker.gcode
+Test-Auftrag-Chromleisten;25;M-104;PolyLite PC Transparent;2;07.10.2025;222f8100a49c30f7_Test_Snapmaker.gcode
+Test-Auftrag-Chromleisten;150;MAT-005;Purple;3;10.10.2025;3fb57d34a0061a62_e775df7da0329dbe_chrome-strips-parts_Snapmaker.gcode
+Test-Auftrag-E1A2B3;25;MAT-006;PLA High Speed;5;12.10.2025;7e6aa2b554fa10ff_bd3c2b382ddb0ef3_eyes-black_Snapmaker.gcode
+Test-Auftrag-Augen;220;MAT-007;PLA High Speed;1;15.10.2025;222f8100a49c30f7_Test_Snapmaker.gcode
+Test-Auftrag-B3C2E4;78;MAT-008;PolyLite PC Transparent;2;17.10.2025;ea56b0b28a5851f1_TestWurfel_Snapmaker.gcode
+Test-Auftrag-F6G7H8;12;MAT-005;PLA High Speed;4;20.10.2025;ea56b0b28a5851f1_TestWurfel_Snapmaker.gcode
+Test-Auftrag-V3W4X5;10;M-101;PLA High Speed;1;30.09.2025;3fb57d34a0061a62_e775df7da0329dbe_chrome-strips-parts_Snapmaker.gcode
+Test-Auftrag-A4B5C6;5;M-102;PolyLite PC Transparent;2;02.10.2025;222f8100a49c30f7_Test_Snapmaker.gcode
+Test-Auftrag-Z8A9B1;50;M-103;NX2;3;05.10.2025;222f8100a49c30f7_Test_Snapmaker.gcode
+Test-Auftrag-Q2R3S4;25;M-104;Purple;2;07.10.2025;7e6aa2b554fa10ff_bd3c2b382ddb0ef3_eyes-black_Snapmaker.gcode
+Test-Auftrag-K1L2M3;150;MAT-005;PLA High Speed;3;10.10.2025;3fb57d34a0061a62_e775df7da0329dbe_chrome-strips-parts_Snapmaker.gcode
+Test-Auftrag-E9F1G2;25;MAT-006;PLA High Speed;5;12.10.2025;ea56b0b28a5851f1_TestWurfel_Snapmaker.gcode
+Test-Auftrag-U7V8W9;220;MAT-007;PolyLite PC Transparent;1;15.10.2025;ea56b0b28a5851f1_TestWurfel_Snapmaker.gcode
+Test-Auftrag-A8D3F1;78;MAT-008;PLA High Speed;2;17.10.2025;ea56b0b28a5851f1_TestWurfel_Snapmaker.gcode
+Test-Auftrag-B3C2E4;10;M-101;PLA High Speed;1;30.09.2025;7e6aa2b554fa10ff_bd3c2b382ddb0ef3_eyes-black_Snapmaker.gcode
+Test-Auftrag-C9F8G7;5;M-102;PolyLite PC Transparent;2;02.10.2025;222f8100a49c30f7_Test_Snapmaker.gcode
+Test-Auftrag-D4E5F6;50;M-103;NX2;3;05.10.2025;ea56b0b28a5851f1_TestWurfel_Snapmaker.gcode
+Test-Auftrag-E1A2B3;25;M-104;PLA High Speed;2;07.10.2025;7e6aa2b554fa10ff_bd3c2b382ddb0ef3_eyes-black_Snapmaker.gcode
+Test-Auftrag-F6G7H8;150;MAT-005;PolyLite PC Transparent;3;10.10.2025;222f8100a49c30f7_Test_Snapmaker.gcode
+Test-Auftrag-G2H3J4;25;MAT-006;PLA High Speed;5;12.10.2025;3fb57d34a0061a62_e775df7da0329dbe_chrome-strips-parts_Snapmaker.gcode
+Test-Auftrag-H8J9K1;220;MAT-007;PolyLite PC Transparent;1;15.10.2025;222f8100a49c30f7_Test_Snapmaker.gcode
+Test-Auftrag-J4K5L6;10;M-101;NX2;1;30.09.2025;3fb57d34a0061a62_e775df7da0329dbe_chrome-strips-parts_Snapmaker.gcode
+Test-Auftrag-K1L2M3;5;M-102;PolyLite PC Transparent;2;02.10.2025;7e6aa2b554fa10ff_bd3c2b382ddb0ef3_eyes-black_Snapmaker.gcode
+Test-Auftrag-L7M8N9;50;M-103;NX2;3;05.10.2025;ea56b0b28a5851f1_TestWurfel_Snapmaker.gcode
+Test-Auftrag-M3N4P5;25;M-104;NX2/white ;2;07.10.2025;cfc8c147a7153ad4_Unterteil_080925_Snapmaker.gcode
+Test-Auftrag-N9P1Q2;150;MAT-005;Purple;3;10.10.2025;7e6aa2b554fa10ff_bd3c2b382ddb0ef3_eyes-black_Snapmaker.gcode
+Test-Auftrag-P5Q6R7;25;MAT-006;NX2;5;12.10.2025;3fb57d34a0061a62_e775df7da0329dbe_chrome-strips-parts_Snapmaker.gcode
+Test-Auftrag-Q2R3S4;220;MAT-007;PolyLite PC Transparent;1;15.10.2025;222f8100a49c30f7_Test_Snapmaker.gcode
+Test-Auftrag-R8S9T1;10;M-101;NX2;1;30.09.2025;cfc8c147a7153ad4_Unterteil_080925_Snapmaker.gcode
+Test-Auftrag-S4T5U6;5;M-102;NX2;2;02.10.2025;cfc8c147a7153ad4_Unterteil_080925_Snapmaker.gcode
+Test-Auftrag-T1U2V3;50;M-103;PLA High Speed;3;05.10.2025;7e6aa2b554fa10ff_bd3c2b382ddb0ef3_eyes-black_Snapmaker.gcode
+Test-Auftrag-V3W4X5;25;M-104;PolyLite PC Transparent;2;07.10.2025;222f8100a49c30f7_Test_Snapmaker.gcode
+Test-Auftrag-W9X1Y2;150;MAT-005;PLA High Speed;3;10.10.2025;ea56b0b28a5851f1_TestWurfel_Snapmaker.gcode
+Test-Auftrag-X5Y6Z7;25;MAT-006;PolyLite PC Transparent;5;12.10.2025;3fb57d34a0061a62_e775df7da0329dbe_chrome-strips-parts_Snapmaker.gcode
+Test-Auftrag-Y2Z3A4;220;MAT-007;NX2;1;15.10.2025;3fb57d34a0061a62_e775df7da0329dbe_chrome-strips-parts_Snapmaker.gcode
+Test-Auftrag-A4B5C6;78;MAT-008;PLA High Speed;2;17.10.2025;7e6aa2b554fa10ff_bd3c2b382ddb0ef3_eyes-black_Snapmaker.gcode
+Test-Auftrag-B1C2D3;12;MAT-005;PolyLite PC Transparent;4;20.10.2025;cfc8c147a7153ad4_Unterteil_080925_Snapmaker.gcode
+Test-Auftrag-C7D8E9;10;M-101;PLA High Speed;1;30.09.2025;3fb57d34a0061a62_e775df7da0329dbe_chrome-strips-parts_Snapmaker.gcode
+Test-Auftrag-D3E4F5;5;M-102;PolyLite PC Transparent;2;02.10.2025;7e6aa2b554fa10ff_bd3c2b382ddb0ef3_eyes-black_Snapmaker.gcode
+Test-Auftrag-F5G6H7;50;M-103;NX2;3;05.10.2025;3fb57d34a0061a62_e775df7da0329dbe_chrome-strips-parts_Snapmaker.gcode
+Test-Auftrag-G2H3J4;25;M-104;PLA High Speed;2;07.10.2025;cfc8c147a7153ad4_Unterteil_080925_Snapmaker.gcode
+Test-Auftrag-H8J9K1;150;MAT-005;PolyLite PC Transparent;3;10.10.2025;7e6aa2b554fa10ff_bd3c2b382ddb0ef3_eyes-black_Snapmaker.gcode
+Test-Auftrag-J4K5L6;25;MAT-006;PLA High Speed;5;12.10.2025;7e6aa2b554fa10ff_bd3c2b382ddb0ef3_eyes-black_Snapmaker.gcode
+Test-Auftrag-L7M8N9;10;M-101;PolyLite PC Transparent;1;30.09.2025;cfc8c147a7153ad4_Unterteil_080925_Snapmaker.gcode
+Test-Auftrag-M3N4P5;5;M-102;NX2;2;02.10.2025;cfc8c147a7153ad4_Unterteil_080925_Snapmaker.gcode
+Test-Auftrag-N9P1Q2;50;M-103;PLA High Speed;3;05.10.2025;222f8100a49c30f7_Test_Snapmaker.gcode
+Test-Auftrag-P5Q6R7;25;M-104;PolyLite PC Transparent;2;07.10.2025;ea56b0b28a5851f1_TestWurfel_Snapmaker.gcode
+Test-Auftrag-R8S9T1;10;M-101;PLA High Speed;1;30.09.2025;ea56b0b28a5851f1_TestWurfel_Snapmaker.gcode
+Test-Auftrag-S4T5U6;5;M-102;PolyLite PC Transparent;2;02.10.2025;7e6aa2b554fa10ff_bd3c2b382ddb0ef3_eyes-black_Snapmaker.gcode
+Test-Auftrag-T1U2V3;50;M-103;PLA High Speed;3;05.10.2025;222f8100a49c30f7_Test_Snapmaker.gcode
+Test-Auftrag-U7V8W9;25;M-104;PolyLite PC Transparent;2;07.10.2025;7e6aa2b554fa10ff_bd3c2b382ddb0ef3_eyes-black_Snapmaker.gcode
+Test-Auftrag-W9X1Y2;150;MAT-005;PLA High Speed;3;10.10.2025;ea56b0b28a5851f1_TestWurfel_Snapmaker.gcode
+Test-Auftrag-X5Y6Z7;25;MAT-006;PolyLite PC Transparent;5;12.10.2025;222f8100a49c30f7_Test_Snapmaker.gcode
+Test-Auftrag-Y2Z3A4;220;MAT-007;NX2;1;15.10.2025;3fb57d34a0061a62_e775df7da0329dbe_chrome-strips-parts_Snapmaker.gcode
+Test-Auftrag-Z8A9B1;78;MAT-008;NX2;2;17.10.2025;3fb57d34a0061a62_e775df7da0329dbe_chrome-strips-parts_Snapmaker.gcode

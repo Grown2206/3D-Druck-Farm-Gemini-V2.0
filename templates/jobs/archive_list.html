@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block title %}Auftragsarchiv{% endblock %}
+
+{% block content %}
+<div class="main-header">
+    <h1><i class="bi bi-archive-fill"></i> Archivierte Aufträge</h1>
+    <div class="header-actions">
+        <a href="{{ url_for('jobs_bp.export_archive') }}" class="btn btn-success">
+            <i class="bi bi-download"></i> CSV Export
+        </a>
+        <a href="{{ url_for('jobs_bp.list_jobs') }}" class="btn btn-outline-light">
+            <i class="bi bi-arrow-left-circle-fill"></i> Aktive Aufträge anzeigen
+        </a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-content table-responsive">
+        <table class="table table-hover align-middle">
+            <thead>
+                <tr>
+                    <th>Auftragsname</th>
+                    <th>Status</th>
+                    <th>Drucker</th>
+                    <th>Bewertung</th>
+                    <th>Abgeschlossen am</th>
+                    <th>Aktionen</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for job in jobs %}
+                <tr>
+                    <td>
+                        <a href="{{ url_for('jobs_bp.job_details', job_id=job.id) }}">{{ job.name }}</a>
+                    </td>
+                    <td>
+                        <span class="badge status-{{ job.status.name|lower }}">{{ job.status.value }}</span>
+                    </td>
+                    <td>{{ job.assigned_printer.name if job.assigned_printer else '-' }}</td>
+                    <td>
+                        <span class="badge 
+                            {% if job.quality_assessment == models.JobQuality.SUCCESSFUL %}bg-success
+                            {% elif job.quality_assessment == models.JobQuality.FAILED %}bg-danger
+                            {% else %}bg-secondary{% endif %}">
+                            {{ job.quality_assessment.value }}
+                        </span>
+                    </td>
+                    <td>{{ job.end_time.strftime('%d.%m.%Y %H:%M') if job.end_time else '-' }}</td>
+                    <td>
+                        <a href="{{ url_for('jobs_bp.job_details', job_id=job.id) }}" class="btn btn-sm btn-outline-info" title="Details ansehen">
+                            <i class="bi bi-info-circle-fill"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="6" class="text-center text-muted">Keine Aufträge im Archiv vorhanden.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block title %}Auftragsdetails: {{ job.name }}{% endblock %}
+{% block page_title %}Auftragsdetails: {{ job.name }}{% endblock %}
+
+{% block content %}
+<div class="main-header">
+    <h1><i class="bi bi-card-checklist"></i> Details</h1>
+    <div class="header-actions">
+        {% if job.status == models.JobStatus.COMPLETED and job.quality_assessment == models.JobQuality.NOT_REVIEWED %}
+            <a href="{{ url_for('jobs_bp.review_job_page', job_id=job.id) }}" class="btn btn-warning"><i class="bi bi-star-fill"></i> Auftrag bewerten</a>
+        {% endif %}
+        
+        <a href="{{ url_for('jobs_bp.job_details', job_id=job.id, edit=true) }}" class="btn btn-primary"><i class="bi bi-pencil-fill"></i> Bearbeiten</a>
+        
+        <button class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#confirmArchiveModal" data-item-name="{{ job.name }}" data-form-action="{{ url_for('jobs_bp.archive_job', job_id=job.id) }}">
+            <i class="bi bi-archive-fill"></i> Archivieren
+        </button>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0">Stammdaten</h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <p><strong>Status:</strong> <span class="badge bg-info text-dark">{{ job.status.value }}</span></p>
+                <p><strong>Priorität:</strong> {{ job.priority }}</p>
+                <p><strong>Erstellt am:</strong> {{ job.created_at.strftime('%d.%m.%Y %H:%M') }}</p>
+                 <p><strong>Qualität:</strong> 
+                    <span class="
+                        {% if job.quality_assessment == models.JobQuality.SUCCESSFUL %}badge bg-success
+                        {% elif job.quality_assessment == models.JobQuality.FAILED %}badge bg-danger
+                        {% else %}badge bg-secondary{% endif %}">
+                        {{ job.quality_assessment.value }}
+                    </span>
+                </p>
+            </div>
+            <div class="col-md-6">
+                <p><strong>Zugewiesener Drucker:</strong> 
+                    {% if job.assigned_printer %}
+                        <a href="{{ url_for('printers_bp.printer_details', printer_id=job.assigned_printer.id) }}">{{ job.assigned_printer.name }}</a>
+                    {% else %}
+                        <span class="text-muted">Kein Drucker zugewiesen</span>
+                    {% endif %}
+                </p>
+                <div class="d-flex align-items-center mb-3">
+                    <strong class="me-2">Benötigtes Material:</strong>
+                    {% if job.required_filament_type %}
+                        <span class="material-dot me-2" style="background-color: {{ job.required_filament_type.color_hex }};"></span>
+                        <span>{{ job.required_filament_type.manufacturer }} {{ job.required_filament_type.name }} ({{ job.required_filament_type.material_type }})</span>
+                    {% else %}
+                        <span class="text-muted">Nicht spezifiziert</span>
+                    {% endif %}
+                </div>
+                <p><strong>G-Code Datei:</strong> 
+                    {% if job.gcode_file %}
+                        {{ job.gcode_file.filename }}
+                    {% else %}
+                        <span class="text-muted">Keine G-Code-Datei zugewiesen</span>
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0">Druckfortschritt & Zeit</h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-4">
+                {% if job.gcode_file and job.gcode_file.preview_image_url %}
+                    <img src="{{ url_for('static', filename=job.gcode_file.preview_image_url) }}" class="img-fluid rounded" alt="Vorschau für {{ job.name }}">
+                {% else %}
+                    <div class="text-center text-muted p-5 border rounded">
+                        <i class="bi bi-image-alt fs-1"></i>
+                        <p>Keine Vorschau verfügbar</p>
+                    </div>
+                {% endif %}
+            </div>
+            <div class="col-md-8">
+                <p><strong>Startzeit:</strong> {{ job.start_time.strftime('%d.%m.%Y %H:%M') if job.start_time else 'Nicht gestartet' }}</p>
+                <p><strong>Endzeit:</strong> {{ job.end_time.strftime('%d.%m.%Y %H:%M') if job.end_time else 'Nicht beendet' }}</p>
+                <p><strong>Geschätzte Druckzeit:</strong> {{ job.gcode_file.estimated_print_time_min }} Minuten</p>
+                <p><strong>Tatsächliche Druckzeit:</strong> 
+                    {% if job.actual_print_duration_s %}
+                        {{ (job.actual_print_duration_s / 60)|round(1) }} Minuten
+                    {% else %}
+                        N/A
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

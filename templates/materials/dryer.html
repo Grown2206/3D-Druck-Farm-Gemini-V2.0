@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}Filament-Trockner{% endblock %}
+
+{% block content %}
+<div class="main-header">
+    <h1><i class="bi bi-thermometer-sun"></i> Filament-Trockner</h1>
+    <div class="header-actions">
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addSpoolToDryerModal">
+            <i class="bi bi-plus-circle-fill"></i> Spule zum Trockner hinzufügen
+        </button>
+    </div>
+</div>
+
+<div class="row row-cols-1 row-cols-md-3 row-cols-lg-4 row-cols-xl-5 g-4">
+    {% for spool in drying_spools %}
+    <div class="col">
+        {% include 'materials/_dryer_spool_card.html' %}
+    </div>
+    {% else %}
+    <div class="col-12">
+        <div class="alert alert-info">
+            <h4 class="alert-heading">Keine Spulen im Trockner</h4>
+            <p>Aktuell werden keine Filamentspulen getrocknet. Fügen Sie eine Spule hinzu, um den Prozess zu starten.</p>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<div class="modal fade" id="addSpoolToDryerModal" tabindex="-1" aria-labelledby="addSpoolToDryerModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form action="{{ url_for('materials_bp.start_drying') }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <div class="modal-header">
+                    <h5 class="modal-title" id="addSpoolToDryerModalLabel">Spule zum Trocknen hinzufügen</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="spool_id" class="form-label">Verfügbare Spule auswählen</label>
+                        <select class="form-select" id="spool_id" name="spool_id" required>
+                            <option value="" disabled selected>-- Bitte Spule wählen --</option>
+                            {% for spool in available_spools %}
+                                <option value="{{ spool.id }}">{{ spool.short_id }} - {{ spool.filament_type.manufacturer }} {{ spool.filament_type.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="drying_temp" class="form-label">Temperatur (°C)</label>
+                            <input type="number" class="form-control" id="drying_temp" name="drying_temp" value="55" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="drying_humidity" class="form-label">Luftfeuchtigkeit (%)</label>
+                            <input type="number" class="form-control" id="drying_humidity" name="drying_humidity" value="10" required>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                    <button type="submit" class="btn btn-success"><i class="bi bi-play-fill"></i> Trocknung starten</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    function formatDuration(seconds) {
+        const h = Math.floor(seconds / 3600).toString().padStart(2, '0');
+        const m = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
+        const s = Math.floor(seconds % 60).toString().padStart(2, '0');
+        return `${h}:${m}:${s}`;
+    }
+
+    function updateTimers() {
+        const timerElements = document.querySelectorAll('.drying-timer');
+        timerElements.forEach(el => {
+            const startTimeISO = el.dataset.startTime;
+            if (startTimeISO) {
+                const startTime = new Date(startTimeISO);
+                const now = new Date();
+                const elapsedSeconds = Math.floor((now - startTime) / 1000);
+                el.textContent = formatDuration(elapsedSeconds);
+            }
+        });
+    }
+
+    // Update timers every second
+    setInterval(updateTimers, 1000);
+    // Initial call to display timers immediately
+    updateTimers();
+});
+</script>
+{% endblock %}

@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block title %}Aufgabe bearbeiten{% endblock %}
+
+{% block content %}
+<div class="main-header">
+    <h1><i class="bi bi-pencil-square"></i> Aufgabe bearbeiten</h1>
+</div>
+
+<div class="card">
+    <div class="card-content">
+        <form id="todo-form" method="POST" action="{{ url_for('todo_bp.edit_todo', todo_id=todo.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            
+            <div class="mb-3">
+                <label for="description" class="form-label">Beschreibung*</label>
+                <textarea id="description" name="description" class="form-control" rows="3" required>{{ todo.description }}</textarea>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="category" class="form-label">Kategorie</label>
+                    <select id="category" name="category" class="form-select">
+                        {% for cat in ToDoCategory %}
+                        <option value="{{ cat.name }}" {% if todo.category == cat %}selected{% endif %}>{{ cat.value }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="status" class="form-label">Status</label>
+                    <select id="status" name="status" class="form-select">
+                        {% for stat in ToDoStatus %}
+                        <option value="{{ stat.name }}" {% if todo.status == stat %}selected{% endif %}>{{ stat.value }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+             <div class="row">
+                <div class="col-md-6 mb-3">
+                     <label for="assigned_to_id" class="form-label">Zuweisen an</label>
+                    <select id="assigned_to_id" name="assigned_to_id" class="form-select">
+                        <option value="">Niemanden</option>
+                        {% for user in users %}
+                        <option value="{{ user.id }}" {% if todo.assigned_to_id == user.id %}selected{% endif %}>{{ user.username }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="end_date" class="form-label">Enddatum</label>
+                    <input type="date" id="end_date" name="end_date" class="form-control" value="{{ todo.end_date.isoformat() if todo.end_date else '' }}">
+                </div>
+            </div>
+             <div class="mb-3">
+                <label for="notes" class="form-label">Bemerkung</label>
+                <textarea id="notes" name="notes" class="form-control" rows="2">{{ todo.notes or '' }}</textarea>
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Änderungen speichern</button>
+                <a href="{{ url_for('todo_bp.index') }}" class="btn btn-secondary">Abbrechen</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

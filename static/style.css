@@ -1,0 +1,183 @@
+/* Generelle Stile */
+body {
+    background-color: #212529;
+}
+
+.main-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.header-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.card {
+    border-radius: 0.5rem;
+    border: 1px solid rgba(255, 255, 255, 0.125);
+}
+
+.table-hover tbody tr:hover {
+    background-color: rgba(255, 255, 255, 0.075);
+}
+
+/* Status Badges */
+.badge.status-idle { background-color: #6c757d; }
+.badge.status-printing { background-color: #0d6efd; }
+.badge.status-queued { background-color: #0dcaf0; color: #000; }
+.badge.status-maintenance { background-color: #ffc107; color: #000; }
+.badge.status-offline { background-color: #495057; }
+.badge.status-completed { background-color: #198754; }
+.badge.status-failed { background-color: #dc3545; }
+.badge.status-cancelled { background-color: #6c757d; }
+.badge.status-assigned { background-color: #fd7e14; }
+.badge.status-pending { background-color: #adb5bd; color: #000; }
+
+
+.clickable-row {
+    cursor: pointer;
+}
+
+.clickable-row:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.feature-icons img {
+    opacity: 0.7;
+    transition: opacity 0.2s;
+    margin-right: 4px;
+}
+
+.feature-icons img:hover {
+    opacity: 1;
+}
+
+.progress-label {
+    position: absolute;
+    top: 55%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    /* --- HIER IST DIE 1. ÄNDERUNG --- */
+    color: white;
+    font-weight: bold;
+    font-size: 1.5rem;
+}
+
+.job-preview-image {
+    max-height: 200px;
+    object-fit: cover;
+    border-radius: 0.25rem 0.25rem 0 0;
+}
+
+/* --- HIER IST DIE 2. ÄNDERUNG --- */
+/* --- Leuchtender Rand für Drucker-Karten --- */
+@keyframes glow-inset {
+  0% {
+    box-shadow: 0 0 4px var(--glow-color-start) inset;
+  }
+  50% {
+    box-shadow: 0 0 30px var(--glow-color-end) inset;
+  }
+  100% {
+    box-shadow: 0 0 4px var(--glow-color-start) inset;
+  }
+}
+
+.card-status-idle {
+    --glow-color-start: rgba(57, 255, 20, 0.7);
+    --glow-color-end: rgba(57, 255, 20, 1);
+    animation: glow-inset 3s infinite ease-in-out;
+}
+
+.card-status-printing {
+  --glow-color-start: rgba(30, 150, 255, 0.6);
+  --glow-color-end: rgba(30, 150, 255, 1);
+  animation: glow-inset 2.5s infinite ease-in-out;
+}
+
+.card-status-error {
+   --glow-color-start: rgba(255, 50, 80, 0.7);
+   --glow-color-end: rgba(255, 50, 80, 1);
+   animation: glow-inset 0.5s infinite ease-in-out;
+}
+
+.card-status-maintenance {
+    --glow-color-start: rgba(255, 193, 7, 0.7);
+    --glow-color-end: rgba(255, 193, 7, 1);
+    animation: glow-inset 2s infinite ease-in-out;
+}
+
+/* NEUE Filament Card Stile */
+.filament-card {
+    background-color: #343a40;
+    color: #f8f9fa;
+}
+
+.spool-visualization {
+    position: relative;
+    width: 100%;
+    padding-top: 100%; /* Stellt ein 1:1 Seitenverhältnis sicher */
+    margin: 0 auto;
+}
+
+.spool-visualization .spool-filament-color,
+.spool-visualization .spool-cover {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+
+.spool-filament-color {
+    /* Das eingefärbte Element, das die spule_filament.png als Maske verwendet */
+    -webkit-mask-image: url("spule_filament.png");
+    mask-image: url("spule_filament.png");
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+    mask-position: center;
+    z-index: 1; /* Liegt hinter dem Cover */
+}
+
+.spool-cover {
+    /* Das Cover-Bild, das über dem eingefärbten Filament liegt */
+    object-fit: contain;
+    z-index: 2; /* Liegt über dem Filament */
+}
+
+.filament-card .progress-bar {
+    color: #212529;
+    font-weight: bold;
+    color: white;
+    font-size: 1.5rem;
+}
+
+@keyframes pulse-blue {
+    0% { box-shadow: 0 0 8px 0px rgba(0, 123, 255, 0.5); }
+    50% { box-shadow: 0 0 14px 4px rgba(0, 123, 255, 0.8); }
+    100% { box-shadow: 0 0 8px 0px rgba(0, 123, 255, 0.5); }
+}
+
+@keyframes pulse-orange {
+    0% { box-shadow: 0 0 8px 0px rgba(253, 126, 20, 0.5); }
+    50% { box-shadow: 0 0 14px 4px rgba(253, 126, 20, 0.8); }
+    100% { box-shadow: 0 0 8px 0px rgba(253, 126, 20, 0.5); }
+}
+
+.in-use-border {
+    border: 1px solid #0d6efd;
+    animation: pulse-blue 2.5s infinite;
+}
+
+.drying-border {
+    border: 1px solid #fd7e14;
+    animation: pulse-orange 2.5s infinite;
+}

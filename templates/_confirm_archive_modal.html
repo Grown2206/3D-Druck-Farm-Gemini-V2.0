@@ -1,0 +1,21 @@
+<div class="modal fade" id="confirmArchiveModal" tabindex="-1" aria-labelledby="confirmArchiveModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="confirmArchiveModalLabel">Archivierung bestätigen</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Möchtest du das Element <strong id="archive-item-name"></strong> wirklich archivieren?</p>
+                <p class="text-muted small">Archivierte Elemente können später über das Archiv-Menü wiederhergestellt werden.</p>
+            </div>
+            <div class="modal-footer">
+                <form id="archive-form" method="POST" action="">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                    <button type="submit" class="btn btn-danger">Archivieren</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

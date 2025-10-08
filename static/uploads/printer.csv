@@ -1,0 +1,4 @@
+id,name,model,status,compatible_material_types,image_url,build_volume_l,build_volume_w,build_volume_h,enclosure,fume_extraction,max_nozzle_temp,max_bed_temp,has_ace,total_print_hours,last_maintenance_date,notes,ip_address,api_key,api_type
+1,Snapmaker,Artisan,QUEUED,"PLA,PETG,PC,ABS",/static/uploads/9b43d18a384d2ada_PHWSN00037_Snapmaker_Artisan.png,400.0,400.0,400.0,1,1,300,110,0,0.0,,,,,NONE
+2,Anycubic 1,Kobra 3 Max,QUEUED,PLA,/static/uploads/dc4c030da41caec7_0e32679e7d40643a_Anycubic-Kobra-3-Max-31306.jpg,420.0,420.0,420.0,1,1,300,90,0,0.0,,,,,NONE
+3,Anycubic 2,Kobra 3 Max,QUEUED,PLA,/static/uploads/0db935ea9380d7c4_0e32679e7d40643a_Anycubic-Kobra-3-Max-31306.jpg,420.0,420.0,500.0,0,0,300,90,0,0.0,,,,,NONE

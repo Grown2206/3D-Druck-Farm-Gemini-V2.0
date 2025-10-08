@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+
+{% block title %}Slicer-Profile verwalten{% endblock %}
+
+{% block content %}
+<div class="main-header">
+    <h1><i class="bi bi-gear-wide-connected"></i> Slicer-Profile verwalten</h1>
+</div>
+
+<div class="row">
+    <div class="col-lg-4 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">{{ form_title }}</h5>
+            </div>
+            <form action="{{ url_for('slicer_profiles_bp.edit_profile', profile_id=profile_to_edit.id) if profile_to_edit else url_for('slicer_profiles_bp.add_profile') }}" 
+                  method="POST" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Profilname <span class="text-danger">*</span></label>
+                        <input type="text" id="name" name="name" class="form-control" value="{{ profile_to_edit.name or '' }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Beschreibung</label>
+                        <textarea id="description" name="description" class="form-control" rows="3">{{ profile_to_edit.description or '' }}</textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label for="profile_file" class="form-label">Profil-Datei (.ini)</label>
+                        <input type="file" id="profile_file" name="profile_file" class="form-control" accept=".ini">
+                        {% if profile_to_edit and profile_to_edit.filename %}
+                        <small class="form-text text-muted">Aktuell: {{ profile_to_edit.filename }}</small>
+                        {% endif %}
+                    </div>
+                    
+                    <h6>Kompatibilität</h6>
+                    <div class="mb-3">
+                        <label class="form-label">Drucker</label>
+                        <div class="form-control" style="height: 150px; overflow-y: auto;">
+                            {% for printer in printers %}
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="printers" value="{{ printer.id }}" id="printer_{{ printer.id }}"
+                                {% if profile_to_edit and printer in profile_to_edit.printers %}checked{% endif %}>
+                                <label class="form-check-label" for="printer_{{ printer.id }}">{{ printer.name }}</label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Filament-Typen</label> {# Label geändert #}
+                        <div class="form-control" style="height: 150px; overflow-y: auto;">
+                            {# KORREKTUR: Iteriert jetzt über die spezifischen filament_types #}
+                            {% for ftype in filament_types %}
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="filaments" value="{{ ftype.id }}" id="ftype_{{ ftype.id }}"
+                                {% if profile_to_edit and ftype in profile_to_edit.compatible_filaments %}checked{% endif %}>
+                                <label class="form-check-label" for="ftype_{{ ftype.id }}">{{ ftype.manufacturer }} {{ ftype.name }}</label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" role="switch" id="is_active" name="is_active" value="y" 
+                        {% if (profile_to_edit and profile_to_edit.is_active) or not profile_to_edit %}checked{% endif %}>
+                        <label class="form-check-label" for="is_active">Profil ist aktiv</label>
+                    </div>
+
+                </div>
+                <div class="card-footer text-end">
+                    {% if profile_to_edit %}
+                    <a href="{{ url_for('slicer_profiles_bp.list_profiles') }}" class="btn btn-secondary">Abbrechen</a>
+                    {% endif %}
+                    <button type="submit" class="btn btn-primary">Speichern</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-content table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead>
+                        <tr>
+                            <th>Profilname</th>
+                            <th>Status</th>
+                            <th>Kompatibilität</th>
+                            <th>Aktionen</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for profile in profiles %}
+                        <tr>
+                            <td><a href="{{ url_for('slicer_profiles_bp.edit_profile', profile_id=profile.id) }}">{{ profile.name }}</a></td>
+                            <td>
+                                {% if profile.is_active %}
+                                <span class="badge bg-success">Aktiv</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Inaktiv</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <small>
+                                    <strong>Drucker:</strong> {{ profile.printers.count() }}<br>
+                                    <strong>Filamente:</strong> {{ profile.compatible_filaments.count() }}
+                                </small>
+                            </td>
+                            <td>
+                                <a href="{{ url_for('slicer_profiles_bp.edit_profile', profile_id=profile.id) }}" class="btn btn-sm btn-outline-primary" title="Bearbeiten"><i class="bi bi-pencil-fill"></i></a>
+                                <button type="button" class="btn btn-sm btn-outline-danger" title="Löschen"
+                                        data-bs-toggle="modal" data-bs-target="#confirmDeleteModal"
+                                        data-item-type="Slicer-Profil" data-item-name="{{ profile.name }}"
+                                        data-form-action="{{ url_for('slicer_profiles_bp.delete_profile', profile_id=profile.id) }}">
+                                    <i class="bi bi-trash-fill"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,2 @@
+id,username,password_hash,role
+1,admin,scrypt:32768:8:1$DhquoUe6WSDWxQvJ$d4a65cfd00dd602d591d14d255e5c922ac8d25748b38fa3b63bbba7d25e203e8bf6766be89a22cefd6bbaed8946fb69735f4d7de6f8a13e496dad14bf3d05406,ADMIN

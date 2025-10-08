@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+
+{% block title %}{{ form_title }}{% endblock %}
+
+{% block content %}
+<div class="main-header">
+    <h1><i class="bi bi-printer-fill"></i> {{ form_title }}</h1>
+    <div class="header-actions">
+        <a href="{{ url_for('printers_bp.list_printers') }}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left"></i> Zurück zur Übersicht
+        </a>
+    </div>
+</div>
+
+<form method="POST" enctype="multipart/form-data" class="needs-validation" novalidate>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+    <div class="row g-4">
+        <div class="col-lg-8">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5><i class="bi bi-info-circle-fill"></i> Hauptinformationen</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-6"><label for="name" class="form-label">Druckername</label><input type="text" class="form-control" id="name" name="name" value="{{ printer.name or '' }}" required><div class="invalid-feedback">Ein Druckername ist erforderlich.</div></div>
+                        <div class="col-md-6"><label for="model" class="form-label">Modell</label><input type="text" class="form-control" id="model" name="model" value="{{ printer.model or '' }}"></div>
+                        <div class="col-md-6"><label for="status" class="form-label">Status</label><select class="form-select" id="status" name="status">{% for status_option in PrinterStatus %}<option value="{{ status_option.name }}" {% if printer and printer.status == status_option %}selected{% endif %}>{{ status_option.value }}</option>{% endfor %}</select></div>
+                        <div class="col-md-6"><label for="location" class="form-label">Standort</label><input type="text" class="form-control" id="location" name="location" value="{{ printer.location or '' }}"></div>
+                        <div class="col-12"><label for="notes" class="form-label">Notizen</label><textarea class="form-control" id="notes" name="notes" rows="3">{{ printer.notes or '' }}</textarea></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="card h-100">
+                 <div class="card-header"><h5><i class="bi bi-image"></i> Druckerbild</h5></div>
+                <div class="card-body text-center d-flex flex-column justify-content-center align-items-center">
+                    <img id="image-preview" src="{{ url_for('static', filename=printer.image_url) if printer and printer.image_url else url_for('static', filename='Neuer Drucker Hinzufügen.png') }}" alt="Druckerbild-Vorschau" class="img-fluid rounded mb-3" style="max-height: 200px; object-fit: contain;">
+                    <input class="form-control" type="file" id="image" name="image" onchange="previewImage(event)">
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header"><h5><i class="bi bi-graph-up"></i> Betriebsstatistik (Initial)</h5></div>
+                <div class="card-body">
+                     <p class="text-muted small">Tragen Sie hier die bereits vorhandenen Betriebsdaten des Druckers ein. Diese Werte dienen als Startpunkt und werden durch abgeschlossene Aufträge automatisch erhöht.</p>
+                    <div class="row g-3">
+                        <div class="col-md-4"><label for="total_print_hours" class="form-label">Bisherige Druckstunden</label><div class="input-group"><input type="number" step="0.1" class="form-control" id="total_print_hours" name="total_print_hours" value="{{ printer.total_print_hours | default(0.0) }}"><span class="input-group-text">Stunden</span></div></div>
+                        <div class="col-md-4"><label for="total_filament_used_g" class="form-label">Bisher verbrauchtes Filament</label><div class="input-group"><input type="number" step="1" class="form-control" id="total_filament_used_g" name="total_filament_used_g" value="{{ printer.total_filament_used_g | default(0) }}"><span class="input-group-text">Gramm</span></div></div>
+                        <div class="col-md-4"><label for="total_jobs_count" class="form-label">Anzahl bisheriger Drucke</label><div class="input-group"><input type="number" step="1" class="form-control" id="total_jobs_count" name="total_jobs_count" value="{{ printer.total_jobs_count | default(0) }}"><span class="input-group-text">Aufträge</span></div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <ul class="nav nav-tabs card-header-tabs" id="editPrinterTabs" role="tablist">
+                        <li class="nav-item" role="presentation"><button class="nav-link active" id="specs-tab-edit" data-bs-toggle="tab" data-bs-target="#specs-edit" type="button" role="tab">Spezifikationen</button></li>
+                        <li class="nav-item" role="presentation"><button class="nav-link" id="costs-tab-edit" data-bs-toggle="tab" data-bs-target="#costs-edit" type="button" role="tab">Wirtschaftlichkeit</button></li>
+                        <li class="nav-item" role="presentation"><button class="nav-link" id="api-tab-edit" data-bs-toggle="tab" data-bs-target="#api-edit" type="button" role="tab">Konnektivität</button></li>
+                    </ul>
+                </div>
+                <div class="card-body tab-content p-4">
+                    <div class="tab-pane fade show active" id="specs-edit" role="tabpanel">
+                        <div class="row g-3">
+                            <div class="col-md-4"><label for="printer_type" class="form-label">Druckertyp</label><select class="form-select" id="printer_type" name="printer_type">{% for p_type in models.PrinterType %}<option value="{{ p_type.name }}" {% if printer and printer.printer_type == p_type %}selected{% endif %}>{{ p_type.value }}</option>{% endfor %}</select></div>
+                            <div class="col-md-4"><label for="bed_type" class="form-label">Druckbett-Typ</label><select class="form-select" id="bed_type" name="bed_type">{% for b_type in models.BedType %}<option value="{{ b_type.name }}" {% if printer and printer.bed_type == b_type %}selected{% endif %}>{{ b_type.value }}</option>{% endfor %}</select></div>
+                            <div class="col-md-4"><label for="extruder_count" class="form-label">Anzahl Extruder</label><input type="number" class="form-control" id="extruder_count" name="extruder_count" value="{{ printer.extruder_count or 1 }}"></div>
+                            <div class="col-md-4"><label for="build_volume_w" class="form-label">Bauraum-Breite (mm)</label><input type="number" class="form-control" id="build_volume_w" name="build_volume_w" value="{{ printer.build_volume_w or '' }}"></div>
+                            <div class="col-md-4"><label for="build_volume_l" class="form-label">Bauraum-Tiefe (mm)</label><input type="number" class="form-control" id="build_volume_l" name="build_volume_l" value="{{ printer.build_volume_l or '' }}"></div>
+                            <div class="col-md-4"><label for="build_volume_h" class="form-label">Bauraum-Höhe (mm)</label><input type="number" class="form-control" id="build_volume_h" name="build_volume_h" value="{{ printer.build_volume_h or '' }}"></div>
+                            <div class="col-md-6"><label for="max_nozzle_temp" class="form-label">Max. Düsentemperatur (°C)</label><input type="number" class="form-control" id="max_nozzle_temp" name="max_nozzle_temp" value="{{ printer.max_nozzle_temp or '' }}"></div>
+                            <div class="col-md-6"><label for="max_bed_temp" class="form-label">Max. Betttemperatur (°C)</label><input type="number" class="form-control" id="max_bed_temp" name="max_bed_temp" value="{{ printer.max_bed_temp or '' }}"></div>
+                            <div class="col-12"><label for="compatible_material_types" class="form-label">Kompatible Materialien</label><input type="text" class="form-control" id="compatible_material_types" name="compatible_material_types" value="{{ printer.compatible_material_types or '' }}" placeholder="z.B. PLA, PETG, ABS, TPU"></div><hr>
+                            <div class="row g-3 mt-2">
+                                <div class="col-md-3"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" id="has_enclosure" name="has_enclosure" {% if printer and printer.has_enclosure %}checked{% endif %}><label class="form-check-label" for="has_enclosure">Einhausung</label></div></div>
+                                <div class="col-md-3"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" id="heated_chamber" name="heated_chamber" {% if printer and printer.heated_chamber %}checked{% endif %}><label class="form-check-label" for="heated_chamber">Beheizter Bauraum</label></div></div>
+                                <div class="col-md-3"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" id="has_camera" name="has_camera" {% if printer and printer.has_camera %}checked{% endif %}><label class="form-check-label" for="has_camera">Kamera</label></div></div>
+                                <div class="col-md-3"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" id="has_filter" name="has_filter" {% if printer and printer.has_filter %}checked{% endif %}><label class="form-check-label" for="has_filter">Luftfilter</label></div></div>
+                                <div class="col-md-3"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" id="has_led" name="has_led" {% if printer and printer.has_led %}checked{% endif %}><label class="form-check-label" for="has_led">Beleuchtung</label></div></div>
+                                <div class="col-md-3"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" id="has_ace" name="has_ace" {% if printer and printer.has_ace %}checked{% endif %}><label class="form-check-label" for="has_ace">Input Shaping</label></div></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="tab-pane fade" id="costs-edit" role="tabpanel">
+                        <div class="row g-3">
+                            <div class="col-md-6"><label for="purchase_cost" class="form-label">Anschaffungskosten</label><div class="input-group"><input type="number" step="0.01" class="form-control" id="purchase_cost" name="purchase_cost" value="{{ printer.purchase_cost or '' }}"><span class="input-group-text">€</span></div></div>
+                            <div class="col-md-6"><label for="commissioning_date" class="form-label">Inbetriebnahmedatum</label><input type="date" class="form-control" id="commissioning_date" name="commissioning_date" value="{{ printer.commissioning_date.strftime('%Y-%m-%d') if printer.commissioning_date else '' }}"></div>
+                            <div class="col-md-6"><label for="useful_life_years" class="form-label">Nutzungsdauer</label><div class="input-group"><input type="number" class="form-control" id="useful_life_years" name="useful_life_years" value="{{ printer.useful_life_years or '' }}"><span class="input-group-text">Jahre</span></div></div>
+                            <div class="col-md-6"><label for="salvage_value" class="form-label">Kalkulatorischer Restwert</label><div class="input-group"><input type="number" step="0.01" class="form-control" id="salvage_value" name="salvage_value" value="{{ printer.salvage_value or '' }}"><span class="input-group-text">€</span></div></div>
+                            <div class="col-md-6"><label for="power_consumption_w" class="form-label">Durchschn. Stromverbrauch</label><div class="input-group"><input type="number" class="form-control" id="power_consumption_w" name="power_consumption_w" value="{{ printer.power_consumption_w or '' }}"><span class="input-group-text">Watt</span></div></div>
+                            <div class="col-md-6"><label for="energy_price_kwh" class="form-label">Strompreis</label><div class="input-group"><input type="number" step="0.0001" class="form-control" id="energy_price_kwh" name="energy_price_kwh" value="{{ printer.energy_price_kwh or '' }}"><span class="input-group-text">€ / kWh</span></div></div>
+                            <div class="col-12"><label for="cost_per_hour" class="form-label">Manuelle Maschinenkosten (optional)</label><div class="input-group"><input type="number" step="0.01" class="form-control" id="cost_per_hour" name="cost_per_hour" value="{{ printer.cost_per_hour or '' }}"><span class="input-group-text">€ / Stunde</span></div><div class="form-text">Wenn dieser Wert gesetzt ist, überschreibt er die automatische Berechnung.</div></div>
+                        </div>
+                    </div>
+                    <div class="tab-pane fade" id="api-edit" role="tabpanel">
+                        <div class="row g-3">
+                            <div class="col-md-4"><label for="ip_address" class="form-label">IP-Adresse</label><input type="text" class="form-control" id="ip_address" name="ip_address" value="{{ printer.ip_address or '' }}"></div>
+                            <div class="col-md-4"><label for="api_type" class="form-label">API-Typ</label><select class="form-select" id="api_type" name="api_type">{% for api in APIType %}<option value="{{ api.name }}" {% if printer and printer.api_type == api %}selected{% endif %}>{{ api.value }}</option>{% endfor %}</select></div>
+                            <div class="col-md-4"><label for="api_key" class="form-label">API-Schlüssel</label><input type="password" class="form-control" id="api_key" name="api_key" value="{{ printer.api_key or '' }}"></div>
+                            <div class="col-md-6"><label for="camera_source" class="form-label">Kamera-Quelle</label><select class="form-select" id="camera_source" name="camera_source">{% for source in CameraSource %}<option value="{{ source.name }}" {% if printer and printer.camera_source == source %}selected{% endif %}>{{ source.value }}</option>{% endfor %}</select></div>
+                            <div class="col-md-6"><label for="webcam_url" class="form-label">Webcam URL</label><input type="text" class="form-control" id="webcam_url" name="webcam_url" value="{{ printer.webcam_url or '' }}"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mt-4 text-end">
+        <a href="{{ url_for('printers_bp.list_printers') }}" class="btn btn-secondary">Abbrechen</a>
+        <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Drucker speichern</button>
+    </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Skript zur Bildvorschau
+function previewImage(event) {
+    const reader = new FileReader();
+    reader.onload = function() {
+        const output = document.getElementById('image-preview');
+        output.src = reader.result;
+    };
+    if (event.target.files[0]) {
+        reader.readAsDataURL(event.target.files[0]);
+    }
+}
+
+// Bootstrap Formular-Validierung
+(function () {
+  'use strict'
+  var forms = document.querySelectorAll('.needs-validation')
+  Array.prototype.slice.call(forms)
+    .forEach(function (form) {
+      form.addEventListener('submit', function (event) {
+        if (!form.checkValidity()) {
+          event.preventDefault()
+          event.stopPropagation()
+        }
+        form.classList.add('was-validated')
+      }, false)
+    })
+})()
+</script>
+{% endblock %}

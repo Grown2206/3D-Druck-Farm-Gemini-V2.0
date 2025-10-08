@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block title %}Registrieren{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+    <h3>Registrieren</h3>
+    <form method="POST">
+        <div>
+            <label for="username">Benutzername</label>
+            <input type="text" id="username" name="username" required>
+        </div>
+        <div>
+            <label for="password">Passwort</label>
+            <input type="password" id="password" name="password" required>
+        </div>
+        <div style="margin-top: 20px;">
+            <button type="submit" class="btn btn-primary" style="width: 100%;">Registrieren</button>
+        </div>
+    </form>
+    <div style="text-align: center; margin-top: 15px;">
+        <small>Bereits registriert? <a href="{{ url_for('auth_bp.login') }}">Hier anmelden</a></small>
+    </div>
+</div>
+{% endblock %}

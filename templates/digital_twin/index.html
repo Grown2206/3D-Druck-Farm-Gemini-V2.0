@@ -1,0 +1,269 @@
+{% extends "base.html" %}
+
+{% block title %}Digitaler Zwilling{% endblock %}
+{% block page_title %}Digitaler Zwilling{% endblock %}
+
+{% block head_extra %}
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<style>
+    #twin-container { width: 100%; height: calc(100vh - 56px); display: block; position: relative; }
+    #loading-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); color: white; display: flex; justify-content: center; align-items: center; z-index: 100; font-size: 1.5rem; text-align: center; }
+    #printer-sidebar { position: absolute; top: 0; left: 0; width: 300px; height: 100%; background-color: rgba(33, 37, 41, 0.9); color: white; padding: 20px; z-index: 50; display: none; border-right: 1px solid #495057; box-shadow: 5px 0 15px rgba(0,0,0,0.2); }
+    #printer-sidebar h4 { border-bottom: 2px solid #6c757d; padding-bottom: 10px; margin-bottom: 20px; }
+    .status-badge { font-size: 1rem; }
+    .info-row { margin-bottom: 15px; }
+    .progress-wrapper { position: relative; height: 2rem; background-color: #495057; border-radius: .375rem; }
+    .progress-bar { font-weight: bold; }
+    .progress-label { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); color: white; text-shadow: 1px 1px 2px black; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="twin-container">
+    <div id="loading-overlay">
+        <div>
+            <div class="spinner-border" role="status"></div>
+            <span class="ms-3">Lade digitalen Zwilling...</span>
+        </div>
+    </div>
+    <div id="printer-sidebar">
+        <h4 id="sidebar-printer-name">Druckername</h4>
+        <div class="info-row"><strong>Status</strong><br><span id="sidebar-printer-status" class="badge status-badge">--</span></div>
+        <div class="info-row"><strong>Aktueller Auftrag</strong><br><span id="sidebar-job-name">--</span></div>
+        <div class="info-row">
+            <strong>Fortschritt</strong>
+            <div class="progress-wrapper mt-1">
+                <div id="sidebar-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated bg-success" role="progressbar" style="width: 0%;"></div>
+                <span id="sidebar-progress-label" class="progress-label">0%</span>
+            </div>
+        </div>
+        <div class="info-row"><strong>Verbleibende Zeit</strong><br><h5 id="sidebar-time-remaining">--:--:--</h5></div>
+    </div>
+</div>
+{% endblock %}
+
+
+{% block scripts %}
+<script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+    // ... (der Rest des Scripts bleibt exakt gleich)
+    const container = document.getElementById('twin-container');
+    const loadingOverlay = document.getElementById('loading-overlay');
+    const sidebar = document.getElementById('printer-sidebar');
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    
+    let selectedPrinterId = null;
+
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.shadowMap.enabled = true;
+    container.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    camera.position.set(0, 15, 5);
+    controls.target.set(0, 1, 0);
+    controls.update();
+
+    scene.background = new THREE.Color(0x334455);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+    scene.add(ambientLight);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 2);
+    dirLight.position.set(10, 20, 5);
+    dirLight.castShadow = true;
+    scene.add(dirLight);
+
+    const groundGeo = new THREE.PlaneGeometry(30, 30);
+    const groundMat = new THREE.MeshStandardMaterial({ color: 0x4a5d70, roughness: 0.8 });
+    const ground = new THREE.Mesh(groundGeo, groundMat);
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    const gltfLoader = new GLTFLoader();
+    const sceneObjects = {}; 
+
+    const statusInfo = {
+        IDLE: { color: new THREE.Color(0x2ecc71), class: 'bg-success' },
+        PRINTING: { color: new THREE.Color(0x3498db), class: 'bg-primary' },
+        MAINTENANCE: { color: new THREE.Color(0xf1c40f), class: 'bg-warning' },
+        ERROR: { color: new THREE.Color(0xe74c3c), class: 'bg-danger' },
+        OFFLINE: { color: new THREE.Color(0x7f8c8d), class: 'bg-secondary' }
+    };
+
+    function formatTime(totalSeconds) {
+        if (totalSeconds === null || totalSeconds < 0) return '--:--:--';
+        const h = Math.floor(totalSeconds / 3600).toString().padStart(2, '0');
+        const m = Math.floor((totalSeconds % 3600) / 60).toString().padStart(2, '0');
+        const s = Math.floor(totalSeconds % 60).toString().padStart(2, '0');
+        return `${h}:${m}:${s}`;
+    }
+
+    function updateSidebar(statusData) {
+        const statusKey = statusData.state_key.toUpperCase();
+        const statusClass = statusInfo[statusKey] ? statusInfo[statusKey].class : 'bg-dark';
+        const progress = Math.round(statusData.progress || 0);
+        const remainingSeconds = (statusData.time_info.total || 0) - (statusData.time_info.elapsed || 0);
+
+        document.getElementById('sidebar-printer-name').innerText = statusData.name;
+        const statusBadge = document.getElementById('sidebar-printer-status');
+        statusBadge.innerText = statusData.state;
+        statusBadge.className = `badge status-badge ${statusClass}`;
+        
+        document.getElementById('sidebar-job-name').innerText = statusData.job_name || 'Kein Auftrag aktiv';
+        
+        const progressBar = document.getElementById('sidebar-progress-bar');
+        progressBar.style.width = `${progress}%`;
+        progressBar.setAttribute('aria-valuenow', progress);
+
+        document.getElementById('sidebar-progress-label').innerText = `${progress}%`;
+        
+        document.getElementById('sidebar-time-remaining').innerText = formatTime(remainingSeconds);
+
+        sidebar.style.display = 'block';
+    }
+
+    function updatePrinterVisuals(printerId, statusData) {
+        const printerObject = sceneObjects[printerId];
+        if (!printerObject) return;
+
+        const statusKey = statusData.state_key.toUpperCase();
+        const targetColor = statusInfo[statusKey] ? statusInfo[statusKey].color : new THREE.Color(0xffffff);
+
+        printerObject.traverse(child => {
+            if (child.isMesh) {
+                if (!child.userData.originalMaterial) {
+                    child.userData.originalMaterial = child.material.clone();
+                }
+                child.material.emissive = targetColor;
+                child.material.emissiveIntensity = 0.8;
+            }
+        });
+        printerObject.userData.statusData = statusData;
+
+        if (parseInt(printerId) === selectedPrinterId) {
+            updateSidebar(statusData);
+        }
+    }
+
+    async function buildScene() {
+        try {
+            const response = await fetch('/api/layout');
+            const layoutItems = await response.json();
+
+            if (layoutItems.length === 0) {
+                loadingOverlay.innerHTML = "Keine Layout-Daten gefunden. Bitte Objekte im Editor hinzufügen.";
+                return;
+            }
+
+             for (const item of layoutItems) {
+                const modelUrl = item.model_path;
+                
+                const model = await gltfLoader.loadAsync(modelUrl);
+                const obj = model.scene;
+
+                obj.position.set(item.position.x, item.position.y, item.position.z);
+                obj.rotation.x = item.rotation.x;
+                obj.rotation.y = item.rotation.y;
+                obj.rotation.z = item.rotation.z;
+                obj.scale.set(item.scale.x, item.scale.y, item.scale.z);
+                
+                obj.traverse(child => {
+                    if (child.isMesh) {
+                        child.castShadow = true;
+                        child.receiveShadow = true;
+                        if (item.color) {
+                            child.material = new THREE.MeshStandardMaterial({ 
+                                color: new THREE.Color(item.color)
+                            });
+                        }
+                    }
+                });
+                
+                scene.add(obj);
+
+                if (item.printer_id) {
+                    obj.userData.layoutItem = item;
+                    sceneObjects[item.printer_id] = obj;
+                }
+            }
+            
+            loadingOverlay.style.display = 'none';
+            connectSocket(); 
+
+        } catch (error) {
+            console.error("Fehler beim Aufbau der Szene:", error);
+            loadingOverlay.innerText = "Fehler beim Laden der 3D-Modelle. Prüfen Sie die Browser-Konsole für Details.";
+        }
+    }
+
+    function connectSocket() {
+        const socket = io();
+
+        socket.on('connect', () => {
+            console.log("Verbunden mit dem Server via WebSocket.");
+            fetch('/api/dashboard/status')
+                .then(res => res.json())
+                .then(allStatuses => {
+                    for (const printerId in allStatuses) {
+                        updatePrinterVisuals(printerId, allStatuses[printerId]);
+                    }
+                });
+        });
+
+        socket.on('status_update', (allStatuses) => {
+            for (const printerId in allStatuses) {
+                updatePrinterVisuals(printerId, allStatuses[printerId]);
+            }
+        });
+    }
+
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+
+    container.addEventListener('click', (event) => {
+        const rect = renderer.domElement.getBoundingClientRect();
+        mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+        raycaster.setFromCamera(mouse, camera);
+        const intersects = raycaster.intersectObjects(scene.children, true);
+
+        for (let i = 0; i < intersects.length; i++) {
+            let obj = intersects[i].object;
+            
+            while (obj && !obj.userData.layoutItem) {
+                obj = obj.parent;
+            }
+
+            if (obj && obj.userData.layoutItem && obj.userData.statusData) {
+                selectedPrinterId = obj.userData.layoutItem.printer_id;
+                updateSidebar(obj.userData.statusData);
+                return;
+            }
+        }
+        
+        sidebar.style.display = 'none';
+        selectedPrinterId = null;
+    });
+
+    function animate() {
+        requestAnimationFrame(animate);
+        controls.update();
+        renderer.render(scene, camera);
+    }
+
+    window.addEventListener('resize', () => {
+        camera.aspect = container.clientWidth / container.clientHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(container.clientWidth, container.clientHeight);
+    });
+
+    buildScene();
+    animate();
+</script>
+{% endblock %}

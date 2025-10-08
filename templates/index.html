@@ -1,0 +1,549 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block head_extra %}
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<style>
+    .form-switch-lg {
+        font-size: 1.1rem;
+        padding-left: 3.5rem;
+    }
+    .form-switch-lg .form-check-input {
+        width: 3rem;
+        height: 1.5rem;
+    }
+    .card-footer .btn-group {
+        width: 100%;
+    }
+    .card-footer .btn-group .btn {
+        flex-grow: 1;
+    }
+    .card-info-row {
+        font-size: 0.85rem;
+        align-items: center; 
+    }
+    .material-dot {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        margin-right: 5px;
+        border: 1px solid rgba(255,255,255,0.3);
+    }
+    
+    /* Wartungs-Widget Animationen */
+    @keyframes pulse-danger {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7); }
+        50% { box-shadow: 0 0 0 10px rgba(220, 53, 69, 0); }
+    }
+    @keyframes pulse-warning {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.7); }
+        50% { box-shadow: 0 0 0 10px rgba(255, 193, 7, 0); }
+    }
+    .card.border-danger { animation: pulse-danger 2s infinite; }
+    .card.border-warning { animation: pulse-warning 2.5s infinite; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="main-header">
+    <h1><i class="bi bi-grid-1x2-fill"></i> Virtuelle Werkbank</h1>
+    <div class="header-actions">
+        <div class="form-check form-switch form-switch-lg" title="Automatische Zuweisung von offenen Aufträgen an freie Drucker an-/ausschalten">
+            <input class="form-check-input" type="checkbox" role="switch" id="scheduler-toggle">
+            <label class="form-check-label" for="scheduler-toggle">Auto-Zuweisung</label>
+        </div>
+    </div>
+</div>
+
+<!-- WARTUNGS-WIDGET -->
+{% set overdue_printers = [] %}
+{% set urgent_printers = [] %}
+{% set soon_printers = [] %}
+
+{% for printer in printers %}
+    {% set hours_since = (printer.total_print_hours or 0) - (printer.last_maintenance_h or 0) %}
+    {% if printer.maintenance_interval_h %}
+        {% if hours_since >= printer.maintenance_interval_h %}
+            {% set _ = overdue_printers.append(printer) %}
+        {% elif hours_since >= (printer.maintenance_interval_h * 0.8) %}
+            {% set _ = urgent_printers.append(printer) %}
+        {% elif hours_since >= (printer.maintenance_interval_h * 0.5) %}
+            {% set _ = soon_printers.append(printer) %}
+        {% endif %}
+    {% endif %}
+{% endfor %}
+
+{% if overdue_printers or urgent_printers or soon_printers %}
+<div class="mb-5">
+    <h2 class="mb-3"><i class="bi bi-exclamation-triangle-fill text-warning"></i> Wartungsstatus</h2>
+    
+    <div class="row g-3 mb-3">
+        <!-- Überfällig -->
+        <div class="col-md-4">
+            <div class="card h-100 {% if overdue_printers %}border-danger{% endif %}">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="card-title mb-0">
+                            <i class="bi bi-exclamation-circle-fill text-danger"></i> Überfällig
+                        </h5>
+                        <span class="badge bg-danger fs-5">{{ overdue_printers | length }}</span>
+                    </div>
+                    
+                    {% if overdue_printers %}
+                        <div class="list-group">
+                            {% for printer in overdue_printers %}
+                            {% set hours_since = (printer.total_print_hours or 0) - (printer.last_maintenance_h or 0) %}
+                            <div class="list-group-item list-group-item-danger d-flex justify-content-between align-items-center">
+                                <div>
+                                    <strong>{{ printer.name }}</strong><br>
+                                    <small>{{ "%.1f"|format(hours_since - printer.maintenance_interval_h) }}h überfällig</small>
+                                </div>
+                                <a href="{{ url_for('printers_bp.printer_details', printer_id=printer.id) }}#maintenance" 
+                                   class="btn btn-sm btn-danger">
+                                    <i class="bi bi-tools"></i>
+                                </a>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-muted mb-0"><i class="bi bi-check-circle"></i> Keine</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <!-- Dringend -->
+        <div class="col-md-4">
+            <div class="card h-100 {% if urgent_printers %}border-warning{% endif %}">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="card-title mb-0">
+                            <i class="bi bi-clock-fill text-warning"></i> Dringend
+                        </h5>
+                        <span class="badge bg-warning text-dark fs-5">{{ urgent_printers | length }}</span>
+                    </div>
+                    
+                    {% if urgent_printers %}
+                        <div class="list-group">
+                            {% for printer in urgent_printers %}
+                            {% set hours_since = (printer.total_print_hours or 0) - (printer.last_maintenance_h or 0) %}
+                            {% set hours_remaining = printer.maintenance_interval_h - hours_since %}
+                            <div class="list-group-item list-group-item-warning d-flex justify-content-between align-items-center">
+                                <div>
+                                    <strong>{{ printer.name }}</strong><br>
+                                    <small>noch {{ "%.1f"|format(hours_remaining) }}h</small>
+                                </div>
+                                <a href="{{ url_for('printers_bp.printer_details', printer_id=printer.id) }}#maintenance" 
+                                   class="btn btn-sm btn-warning">
+                                    <i class="bi bi-tools"></i>
+                                </a>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-muted mb-0"><i class="bi bi-check-circle"></i> Keine</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <!-- Bald fällig -->
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="card-title mb-0">
+                            <i class="bi bi-info-circle-fill text-info"></i> Bald fällig
+                        </h5>
+                        <span class="badge bg-info text-dark fs-5">{{ soon_printers | length }}</span>
+                    </div>
+                    
+                    {% if soon_printers %}
+                        <div class="list-group">
+                            {% for printer in soon_printers %}
+                            {% set hours_since = (printer.total_print_hours or 0) - (printer.last_maintenance_h or 0) %}
+                            {% set hours_remaining = printer.maintenance_interval_h - hours_since %}
+                            <div class="list-group-item d-flex justify-content-between align-items-center">
+                                <div>
+                                    <strong>{{ printer.name }}</strong><br>
+                                    <small>noch {{ "%.1f"|format(hours_remaining) }}h</small>
+                                </div>
+                                <a href="{{ url_for('printers_bp.printer_details', printer_id=printer.id) }}#maintenance" 
+                                   class="btn btn-sm btn-outline-info">
+                                    <i class="bi bi-info-circle"></i>
+                                </a>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-muted mb-0"><i class="bi bi-check-circle"></i> Keine</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Schnellzugriff -->
+    {% if overdue_printers or urgent_printers %}
+    <div class="alert alert-warning d-flex justify-content-between align-items-center">
+        <div>
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+            <strong>Achtung:</strong> 
+            {{ (overdue_printers | length) + (urgent_printers | length) }} Drucker benötigen Wartung!
+        </div>
+        <a href="{{ url_for('maintenance_bp.schedule') }}" class="btn btn-warning">
+            <i class="bi bi-calendar-check"></i> Zum Wartungsplan
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+<h2 class="mb-3">Drucker-Übersicht</h2>
+<div class="row row-cols-1 row-cols-md-2 row-cols-xl-4 g-4 mb-5">
+    {% for printer in printers %}
+    <div class="col" id="printer-card-wrapper-{{ printer.id }}">
+        <div class="card h-100 card-status-{{ printer.status.name|lower }}" id="printer-card-{{ printer.id }}">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <a href="{{ url_for('printers_bp.printer_details', printer_id=printer.id) }}" class="text-white text-decoration-none" title="Druckerdetails anzeigen">{{ printer.name }}</a>
+                </h5>
+                <a href="{{ url_for('printers_bp.edit_printer', printer_id=printer.id) }}" class="btn btn-sm btn-outline-light" title="Drucker bearbeiten"><i class="bi bi-gear-fill"></i></a>
+            </div>
+            
+            <div class="card-body d-flex flex-column" id="card-body-{{ printer.id }}">
+            </div>
+            <div class="card-footer text-center" id="card-footer-{{ printer.id }}">
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="col">
+        <div class="alert alert-info">Keine Drucker gefunden. Bitte fügen Sie unter "Drucker verwalten" einen neuen Drucker hinzu.</div>
+    </div>
+    {% endfor %}
+</div>
+
+<h2 class="mb-3">Offene Aufträge</h2>
+<div class="card">
+    <div class="card-content table-responsive">
+        <table class="table table-hover align-middle">
+             <thead>
+                <tr>
+                    <th>Auftragsname</th>
+                    <th>Priorität</th>
+                    <th>Erstellt am</th>
+                    <th>Aktion</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for job in unassigned_jobs %}
+                <tr>
+                    <td><a href="{{ url_for('jobs_bp.job_details', job_id=job.id) }}">{{ job.name }}</a></td>
+                    <td>{{ job.priority }}</td>
+                    <td>{{ job.created_at.strftime('%d.%m.%Y %H:%M') }}</td>
+                    <td>
+                        <button class="btn btn-sm btn-primary" 
+                                data-bs-toggle="modal" 
+                                data-bs-target="#assignJobModal" 
+                                data-job-id="{{ job.id }}" 
+                                data-job-name="{{ job.name }}">
+                            <i class="bi bi-arrow-right-square-fill"></i> Zuweisen
+                        </button>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="4" class="text-center text-muted">Keine offenen Aufträge vorhanden.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modals bleiben unverändert -->
+<div class="modal fade" id="imagePreviewModal" tabindex="-1" aria-labelledby="imagePreviewModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content bg-dark">
+            <div class="modal-header">
+                <h5 class="modal-title" id="imagePreviewModalLabel">Vorschau</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center">
+                <img src="" id="modal-preview-image" class="img-fluid rounded" alt="Vollbild-Vorschau">
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="assignJobModal" tabindex="-1" aria-labelledby="assignJobModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form action="{{ url_for('jobs_bp.assign_job') }}" method="POST">
+                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                 <input type="hidden" id="assign-job-id" name="job_id">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="assignJobModalLabel">Auftrag zuweisen</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Wählen Sie einen Drucker für den Auftrag <strong id="assign-job-name"></strong> aus:</p>
+                    <select name="printer_id" class="form-select" required>
+                        <option value="" disabled selected>Drucker auswählen...</option>
+                        {% for printer in printers %}
+                            {% if printer.status == models.PrinterStatus.IDLE %}
+                            <option value="{{ printer.id }}">{{ printer.name }}</option>
+                            {% endif %}
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                    <button type="submit" class="btn btn-primary">Zuweisen</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const csrfToken = "{{ csrf_token() }}";
+    const socket = io();
+    
+    // Wartungserinnerung
+    const overdueCount = {{ overdue_printers | length }};
+    if (overdueCount > 0 && 'Notification' in window && Notification.permission === 'granted') {
+        new Notification('Wartung erforderlich!', {
+            body: `${overdueCount} Drucker benötigen dringend Wartung`,
+            icon: '{{ url_for("static", filename="Logo.jpg") }}',
+            tag: 'maintenance-reminder'
+        });
+    }
+
+    function setupModal(modalId, imageAttribute, imageTargetId) {
+        const modal = document.getElementById(modalId);
+        if (modal) {
+            modal.addEventListener('show.bs.modal', function(event) {
+                const triggerElement = event.relatedTarget;
+                const imageUrl = triggerElement.getAttribute(imageAttribute);
+                if (imageUrl) document.getElementById(imageTargetId).src = imageUrl;
+            });
+        }
+    }
+    setupModal('imagePreviewModal', 'data-bs-image-url', 'modal-preview-image');
+    
+    const assignJobModal = document.getElementById('assignJobModal');
+    if(assignJobModal) {
+        assignJobModal.addEventListener('show.bs.modal', function(event) {
+            const button = event.relatedTarget;
+            document.getElementById('assign-job-id').value = button.getAttribute('data-job-id');
+            document.getElementById('assign-job-name').textContent = `"${button.getAttribute('data-job-name')}"`;
+        });
+    }
+
+    function formatTime(totalSeconds) {
+        if (totalSeconds === null || totalSeconds < 0) return '00:00:00';
+        const h = Math.floor(totalSeconds / 3600).toString().padStart(2, '0');
+        const m = Math.floor((totalSeconds % 3600) / 60).toString().padStart(2, '0');
+        const s = Math.floor(totalSeconds % 60).toString().padStart(2, '0');
+        return `${h}:${m}:${s}`;
+    }
+
+    function buildAdditionalInfo(printerData) {
+        let spoolInfo = `
+            <div class="d-flex justify-content-between card-info-row text-muted">
+                <span><i class="bi bi-disc-fill me-2"></i>Geladenes Filament</span>
+                <span><i>Keine Spule</i></span>
+            </div>`;
+        if (printerData.current_spool) {
+            const remainingGrams = printerData.current_spool.remaining_g ? printerData.current_spool.remaining_g.toFixed(1) : 'N/A';
+            spoolInfo = `
+            <div class="d-flex justify-content-between card-info-row">
+                <span class="fw-bold">
+                    <span class="material-dot" style="background-color: ${printerData.current_spool.color_hex};"></span>
+                    ${printerData.current_spool.name} (~${remainingGrams}g)
+                </span>
+                <button class="btn btn-xs btn-outline-light" 
+                        data-bs-toggle="modal" 
+                        data-bs-target="#changeFilamentModal"
+                        data-printer-id="${printerData.id}"
+                        data-printer-name="${printerData.name}"
+                        title="Filament laden">
+                    <i class="bi bi-plus-circle"></i>
+                </button>
+            </div>`;
+        }
+
+        let nextJobInfo = `
+            <div class="d-flex justify-content-between card-info-row text-muted">
+                <span><i class="bi bi-skip-end-fill me-2"></i>Nächster Auftrag</span>
+                <span><i>Kein Auftrag</i></span>
+            </div>`;
+        if (printerData.next_job) {
+            nextJobInfo = `
+            <div class="d-flex justify-content-between card-info-row">
+                <span><i class="bi bi-skip-end-fill me-2"></i>Nächster Auftrag</span>
+                <span class="fw-bold">${printerData.next_job.name}</span>
+            </div>
+            <div class="d-flex justify-content-between card-info-row">
+                <span><i class="bi bi-palette-fill me-2"></i>Nächstes Material</span>
+                <span class="fw-bold">${printerData.next_job.material}</span>
+            </div>`;
+        }
+        return `<hr class="my-2">${spoolInfo}${nextJobInfo}`;
+    }
+
+    function buildJobView(printerData) {
+        const progress = printerData.progress || 0;
+        const previewImageUrl = printerData.preview_image_url ? `{{ url_for('static', filename='') }}${printerData.preview_image_url}` : `{{ url_for('static', filename='Logo.jpg') }}`;
+        const isPrinting = printerData.state_key === 'PRINTING';
+        const gcodeId = printerData.gcode_file_id;
+
+        const imageHtml = `
+            <img src="${previewImageUrl}" alt="Vorschau" class="img-fluid rounded job-preview-image"
+                 onerror="this.onerror=null;this.src='{{ url_for('static', filename='Logo.jpg') }}';">
+        `;
+
+        const previewHtml = gcodeId ? `
+            <a href="/visualizer/view/${gcodeId}" title="Klicken für interaktive 3D-Vorschau">
+                ${imageHtml}
+            </a>
+        ` : imageHtml;
+
+        return `
+            <div class="text-center mb-3">
+                ${previewHtml}
+            </div>
+            <h6><a href="/jobs/${printerData.job_id}" title="Auftragsdetails anzeigen">${printerData.job_name || 'Unbekannter Job'}</a></h6>
+            <div class="progress-wrapper mb-2">
+                <div class="progress" role="progressbar" aria-valuenow="${progress}" aria-valuemin="0" aria-valuemax="100" style="height: 1.2rem;">
+                    <div class="progress-bar progress-bar-striped ${isPrinting ? 'progress-bar-animated' : ''} bg-success" style="width: ${progress.toFixed(1)}%"></div>
+                </div>
+                <span class="progress-label">${progress.toFixed(1)}%</span>
+            </div>
+            <div class="d-flex justify-content-between text-muted small mt-1">
+                <span>${formatTime(printerData.time_info.elapsed)}</span>
+                <span>${formatTime(printerData.time_info.total)}</span>
+            </div>
+            ${buildAdditionalInfo(printerData)}
+            <div class="mt-auto pt-3 text-center">
+                <div class="btn-group" role="group">
+                    <form action="/printer_actions/job/start/${printerData.job_id}" method="POST" class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/><button type="submit" class="btn btn-sm btn-outline-success" ${isPrinting ? 'disabled' : ''} title="Start"><i class="bi bi-play-fill"></i></button></form>
+                    <form action="/printer_actions/job/pause/${printerData.job_id}" method="POST" class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/><button type="submit" class="btn btn-sm btn-outline-warning" ${!isPrinting ? 'disabled' : ''} title="Pause"><i class="bi bi-pause-fill"></i></button></form>
+                    <form action="/printer_actions/job/stop/${printerData.job_id}" method="POST" class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/><button type="submit" class="btn btn-sm btn-outline-danger" title="Stop"><i class="bi bi-stop-fill"></i></button></form>
+                </div>
+            </div>`;
+    }
+
+    function buildIdleView(printerData) {
+        return `
+            <div class="text-center my-auto">
+                <i class="bi bi-circle-slash display-4 text-muted"></i>
+                <p class="text-muted mt-2">${printerData.state}</p>
+                <small class="text-muted">Bereit für neuen Auftrag</small>
+            </div>
+            <div class="mt-auto">
+                ${buildAdditionalInfo(printerData)}
+            </div>`;
+    }
+    
+    function buildStatusFooter(printerData) {
+        const statuses = {
+            IDLE: "Leerlauf",
+            MAINTENANCE: "Wartung",
+            OFFLINE: "Offline",
+            ERROR: "Fehler"
+        };
+        let dropdownItems = '';
+        for (const [key, value] of Object.entries(statuses)) {
+            if (key !== printerData.state_key) {
+                dropdownItems += `<li><a class="dropdown-item status-change-btn" href="#" data-printer-id="${printerData.id}" data-status="${key}">${value}</a></li>`;
+            }
+        }
+
+        return `
+            <div class="btn-group">
+                <button type="button" class="btn btn-secondary btn-sm">${printerData.state}</button>
+                <button type="button" class="btn btn-secondary btn-sm dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown" aria-expanded="false">
+                    <span class="visually-hidden">Toggle Dropdown</span>
+                </button>
+                <ul class="dropdown-menu">
+                    ${dropdownItems}
+                </ul>
+            </div>`;
+    }
+    
+    function updateDashboard(data) {
+        for (const printerId in data) {
+            const printerData = data[printerId];
+            const card = document.getElementById(`printer-card-${printerId}`);
+            const cardBody = document.getElementById(`card-body-${printerId}`);
+            const cardFooter = document.getElementById(`card-footer-${printerId}`);
+            if (!card || !cardBody || !cardFooter) continue;
+
+            card.className = `card h-100 card-status-${printerData.state_key.toLowerCase()}`;
+            
+            cardBody.innerHTML = (printerData.state_key === 'PRINTING' || printerData.job_id) ? buildJobView(printerData) : buildIdleView(printerData);
+            cardFooter.innerHTML = buildStatusFooter(printerData);
+        }
+        addStatusChangeListeners();
+    }
+    
+    function addStatusChangeListeners() {
+        document.querySelectorAll('.status-change-btn').forEach(button => {
+            button.addEventListener('click', function(e) {
+                e.preventDefault();
+                const printerId = this.dataset.printerId;
+                const newStatus = this.dataset.status;
+                fetch(`/api/printer/${printerId}/status`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                    body: JSON.stringify({ status: newStatus })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.status !== 'success') alert(`Fehler: ${data.message}`);
+                })
+                .catch(err => console.error("Status change failed:", err));
+            });
+        });
+    }
+
+    fetch('/api/dashboard/status').then(res => res.json()).then(data => updateDashboard(data));
+    socket.on('status_update', data => updateDashboard(data));
+    socket.on('reload_dashboard', () => location.reload());
+
+    const schedulerToggle = document.getElementById('scheduler-toggle');
+    if (schedulerToggle) {
+        fetch("{{ url_for('api_bp.get_scheduler_status') }}").then(res => res.json()).then(data => { schedulerToggle.checked = data.enabled; });
+        schedulerToggle.addEventListener('change', function() {
+            fetch("{{ url_for('api_bp.set_scheduler_status') }}", {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                body: JSON.stringify({ enabled: this.checked })
+            }).then(res => res.json()).then(data => alert(data.message));
+        });
+    }
+});
+</script>
+{% endblock %}
+                        title="Filament wechseln">
+                    <i class="bi bi-arrow-repeat"></i>
+                </button>
+            </div>`;
+        } else {
+             spoolInfo = `
+            <div class="d-flex justify-content-between card-info-row">
+                <span class="text-muted"><i>Keine Spule geladen</i></span>
+                <button class="btn btn-xs btn-outline-light" 
+                        data-bs-toggle="modal" 
+                        data-bs-target="#changeFilamentModal"
+                        data-printer-id="${printerData.id}"
+                        data-printer-name="${printerData.name}"
+                

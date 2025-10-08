@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="de" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}3D Druck Farm{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='sidebar.css') }}">
+    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.164.1/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.164.1/examples/jsm/"
+            }
+        }
+    </script>
+    {% block head_extra %}{% endblock %}
+</head>
+<body>
+    <div class="d-flex">
+        <nav id="sidebar" class="d-flex flex-column flex-shrink-0 p-3 text-white bg-dark">
+            <a href="{{ url_for('index') }}" class="d-flex align-items-center mb-3 mb-md-0 me-md-auto text-white text-decoration-none">
+                <img src="{{ url_for('static', filename='Logo.jpg') }}" alt="Logo" class="sidebar-logo me-2">
+                <span class="sidebar-text fs-4">3D Druck Farm</span>
+            </a>
+            <hr class="sidebar-text">
+            <ul class="nav nav-pills flex-column mb-auto">
+                <li class="nav-label sidebar-text"><small>WERKZEUGE</small></li>
+                <li><a href="{{ url_for('digital_twin_bp.index') }}" class="nav-link text-white {% if request.blueprint == 'digital_twin_bp' %}active{% endif %}"><i class="bi bi-bounding-box me-2"></i><span class="sidebar-text">Digitaler Zwilling</span></a></li>
+                <li><a href="{{ url_for('layout_editor_bp.editor') }}" class="nav-link text-white {% if request.blueprint == 'layout_editor_bp' %}active{% endif %}"><i class="bi bi-pencil-square me-2"></i><span class="sidebar-text">Layout Editor</span></a></li>
+                
+                <li class="nav-label sidebar-text mt-3"><small>KERNFUNKTIONEN</small></li>
+                <li><a href="{{ url_for('jobs_bp.dashboard') }}" class="nav-link text-white"><i class="bi bi-grid-1x2-fill me-2"></i><span class="sidebar-text">Dashboard</span></a></li>
+                <li><a href="{{ url_for('jobs_bp.list_jobs') }}" class="nav-link text-white"><i class="bi bi-card-list me-2"></i><span class="sidebar-text">Auftragsübersicht</span></a></li>
+                <li><a href="{{ url_for('batch_planner_bp.index') }}" class="nav-link text-white"><i class="bi bi-grid-3x3-gap-fill me-2"></i><span class="sidebar-text">Batch-Planung</span></a></li>
+                <li><a href="{{ url_for('jobs_bp.archive_list') }}" class="nav-link text-white"><i class="bi bi-archive-fill me-2"></i><span class="sidebar-text">Archiv</span></a></li>
+                <li><a href="{{ url_for('printers_bp.list_printers') }}" class="nav-link text-white"><img src="{{ url_for('static', filename='3d-printer-icon.png') }}" alt="Drucker" class="sidebar-icon me-2"><span class="sidebar-text">Drucker</span></a></li>
+                <li><a href="{{ url_for('materials_bp.list_filaments') }}" class="nav-link text-white"><i class="bi bi-disc me-2"></i><span class="sidebar-text">Filament</span></a></li>
+                <li><a href="{{ url_for('materials_bp.dryer_view') }}" class="nav-link text-white"><i class="bi bi-thermometer-half me-2"></i><span class="sidebar-text">Filament-Trockner</span></a></li>
+                
+                <li><a href="{{ url_for('slicer_bp.slicer_index') }}" class="nav-link text-white"><i class="bi bi-layers me-2"></i><span class="sidebar-text">Slicer</span></a></li>
+
+                <li class="nav-label sidebar-text mt-3"><small>VERWALTUNG</small></li>
+                <li>
+                    <a class="nav-link text-white" href="{{ url_for('slicer_profiles_bp.list_profiles') }}">
+                        <i class="bi bi-sliders me-2"></i>
+                        <span class="sidebar-text">Slicer-Profile</span>
+                    </a>
+                </li>
+                <li>
+                    <a class="nav-link text-white" href="{{ url_for('consumables_bp.list_consumables') }}">
+                        <i class="bi bi-box-seam me-2"></i>
+                        <span class="sidebar-text">Verbrauchsmaterial</span>
+                    </a>
+                </li>
+                
+                <!-- Wartung mit Dropdown -->
+                <li class="nav-item">
+                    <a class="nav-link text-white d-flex justify-content-between align-items-center" 
+                       href="#" 
+                       data-bs-toggle="collapse" 
+                       data-bs-target="#maintenanceSubmenu" 
+                       aria-expanded="false">
+                        <span>
+                            <i class="bi bi-tools me-2"></i>
+                            <span class="sidebar-text">Wartung</span>
+                        </span>
+                        <span class="d-flex align-items-center">
+                            {% if current_user.is_authenticated %}
+                                {% set overdue_count = namespace(value=0) %}
+                                {% for printer in Printer.query.all() %}
+                                    {% set hours_since = (printer.total_print_hours or 0) - (printer.last_maintenance_h or 0) %}
+                                    {% if printer.maintenance_interval_h and hours_since >= printer.maintenance_interval_h %}
+                                        {% set overdue_count.value = overdue_count.value + 1 %}
+                                    {% endif %}
+                                {% endfor %}
+                                {% if overdue_count.value > 0 %}
+                                    <span class="badge bg-danger rounded-pill me-2 sidebar-text">{{ overdue_count.value }}</span>
+                                {% endif %}
+                            {% endif %}
+                            <i class="bi bi-chevron-down sidebar-text"></i>
+                        </span>
+                    </a>
+                    <ul class="collapse list-unstyled ps-4" id="maintenanceSubmenu">
+                        <li>
+                            <a href="{{ url_for('maintenance_bp.schedule') }}" class="nav-link text-white">
+                                <i class="bi bi-calendar-check me-2"></i>
+                                <span class="sidebar-text">Wartungsplan</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="{{ url_for('maintenance_bp.history') }}" class="nav-link text-white">
+                                <i class="bi bi-clock-history me-2"></i>
+                                <span class="sidebar-text">Verlauf</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="{{ url_for('maintenance_bp.index') }}" class="nav-link text-white">
+                                <i class="bi bi-gear me-2"></i>
+                                <span class="sidebar-text">Aufgaben verwalten</span>
+                            </a>
+                        </li>
+                    </ul>
+                </li>
+                
+                <li>
+                    <a class="nav-link text-white" href="{{ url_for('kpi_bp.dashboard') }}">
+                        <i class="bi bi-bar-chart-line-fill me-2"></i>
+                        <span class="sidebar-text">KPI-Dashboard</span>
+                    </a>
+                </li>
+                <li>
+                    <a class="nav-link text-white" href="{{ url_for('calculator_bp.index') }}">
+                        <i class="bi bi-calculator-fill me-2"></i>
+                        <span class="sidebar-text">Kostenkalkulator</span>
+                    </a>
+                </li>
+                <li>
+                    <a class="nav-link text-white" href="{{ url_for('todo_bp.index') }}">
+                        <i class="bi bi-check2-square me-2"></i>
+                        <span class="sidebar-text">To-Do Liste</span>
+                    </a>
+                </li>
+            </ul>
+            <hr class="sidebar-text">
+            {% if current_user.is_authenticated %}
+            <div class="dropdown">
+                <a href="#" class="d-flex align-items-center text-white text-decoration-none dropdown-toggle" id="dropdownUser1" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="bi bi-person-circle fs-4 me-2"></i>
+                    <strong class="sidebar-text">{{ current_user.username }}<br><small>({{ current_user.role.value }})</small></strong>
+                </a>
+                <ul class="dropdown-menu dropdown-menu-dark text-small shadow" aria-labelledby="dropdownUser1">
+                    <li><a class="dropdown-item" href="{{ url_for('auth_bp.logout') }}">Abmelden</a></li>
+                </ul>
+            </div>
+            {% endif %}
+        </nav>
+
+        <div id="main-content">
+            <header class="d-flex align-items-center p-2 border-bottom">
+                 <button class="btn btn-dark d-lg-none me-2" type="button" data-bs-toggle="offcanvas" data-bs-target="#sidebar" aria-controls="sidebar">
+                    <i class="bi bi-list"></i>
+                </button>
+                <button id="sidebar-toggle" class="btn btn-dark d-none d-lg-block"><i class="bi bi-list"></i></button>
+                <h4 class="ms-3 mb-0">{% block page_title %}{% endblock %}</h4>
+            </header>
+
+            <main class="container-fluid p-4">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                            <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                                {{ message }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+                
+                {% block content %}{% endblock %}
+            </main>
+        </div>
+    </div>
+    
+    <div class="modal fade" id="confirmDeleteModal" tabindex="-1" aria-labelledby="confirmDeleteModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header"><h5 class="modal-title" id="confirmDeleteModalLabel">Löschen bestätigen</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+                <div class="modal-body">Sind Sie sicher, dass Sie <strong id="item-type"></strong> "<strong id="item-name"></strong>" wirklich löschen möchten?</div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                    <form id="delete-form" method="POST" class="d-inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                        <button type="submit" class="btn btn-danger">Löschen</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="modal fade" id="confirmArchiveModal" tabindex="-1" aria-labelledby="confirmArchiveModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header"><h5 class="modal-title" id="confirmArchiveModalLabel">Archivierung bestätigen</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+                <div class="modal-body">Möchtest du das Element <strong id="archive-item-name"></strong> wirklich archivieren?</div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                    <form id="archive-form" method="POST" action="">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                        <button type="submit" class="btn btn-warning">Archivieren</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{{ url_for('static', filename='sidebar.js') }}"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const confirmDeleteModal = document.getElementById('confirmDeleteModal');
+            if (confirmDeleteModal) {
+                confirmDeleteModal.addEventListener('show.bs.modal', event => {
+                    const button = event.relatedTarget;
+                    const itemType = button.getAttribute('data-item-type');
+                    const itemName = button.getAttribute('data-item-name');
+                    const formAction = button.getAttribute('data-form-action');
+                    confirmDeleteModal.querySelector('#item-type').textContent = itemType;
+                    confirmDeleteModal.querySelector('#item-name').textContent = itemName;
+                    confirmDeleteModal.querySelector('#delete-form').action = formAction;
+                });
+            }
+            const confirmArchiveModal = document.getElementById('confirmArchiveModal');
+            if (confirmArchiveModal) {
+                confirmArchiveModal.addEventListener('show.bs.modal', event => {
+                    const button = event.relatedTarget;
+                    const itemName = button.getAttribute('data-item-name');
+                    const formAction = button.getAttribute('data-form-action');
+                    confirmArchiveModal.querySelector('#archive-item-name').textContent = itemName;
+                    confirmArchiveModal.querySelector('#archive-form').action = formAction;
+                });
+            }
+        });
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

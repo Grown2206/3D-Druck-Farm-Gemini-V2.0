@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block title %}Spulen für {{ filament_type.name }}{% endblock %}
+
+{% block content %}
+<div class="main-header">
+    <h1><i class="bi bi-disc"></i> Spulen verwalten: {{ filament_type.manufacturer }} {{ filament_type.name }}</h1>
+    <div class="header-actions">
+        <a href="{{ url_for('materials_bp.list_types') }}" class="btn btn-secondary"><i class="bi bi-arrow-left"></i> Zurück zu den Typen</a>
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addSpoolModal">
+            <i class="bi bi-plus-circle-fill"></i> Neue Spule hinzufügen
+        </button>
+    </div>
+</div>
+
+<div class="row row-cols-1 row-cols-md-3 row-cols-lg-4 row-cols-xl-5 g-4">
+    {% for spool in filament_type.spools|sort(attribute='short_id') %}
+    <div class="col">
+        {# KORREKTUR: Nutzt jetzt die Management-Karte für volle Funktionalität #}
+        {% include 'materials/_spool_management_card.html' %}
+    </div>
+    {% else %}
+    <div class="col-12">
+        <div class="alert alert-info">
+            Für diesen Filament-Typ sind noch keine Spulen registriert.
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<div class="modal fade" id="addSpoolModal" tabindex="-1" aria-labelledby="addSpoolModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form action="{{ url_for('materials_bp.add_spool') }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <input type="hidden" name="filament_type_id" value="{{ filament_type.id }}">
+                <input type="hidden" name="manage_spools_redirect" value="true"> 
+                <div class="modal-header">
+                    <h5 class="modal-title" id="addSpoolModalLabel">Neue Spule für {{ filament_type.name }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="initial_weight_g" class="form-label">Initialgewicht (in g)</label>
+                        <input type="number" class="form-control" id="initial_weight_g" name="initial_weight_g" value="{{ filament_type.spool_weight_g or 1000 }}" required>
+                    </div>
+                     <div class="mb-3">
+                        <label for="purchase_date" class="form-label">Kaufdatum</label>
+                        <input type="date" class="form-control" id="purchase_date" name="purchase_date">
+                    </div>
+                    <div class="mb-3">
+                        <label for="notes" class="form-label">Notizen</label>
+                        <textarea class="form-control" id="notes" name="notes" rows="2"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                    <button type="submit" class="btn btn-primary">Spule hinzufügen</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+
+{% block title %}Wartungsverlauf{% endblock %}
+
+{% block content %}
+<div class="main-header">
+    <h1><i class="bi bi-clock-history"></i> Wartungsverlauf</h1>
+    <div class="header-actions">
+        <a href="{{ url_for('maintenance_bp.schedule') }}" class="btn btn-warning">
+            <i class="bi bi-calendar-check"></i> Wartungsplan
+        </a>
+        <a href="{{ url_for('maintenance_bp.index') }}" class="btn btn-secondary">
+            <i class="bi bi-gear"></i> Aufgaben
+        </a>
+    </div>
+</div>
+
+<!-- Filter -->
+<div class="card mb-4">
+    <div class="card-header">
+        <h5><i class="bi bi-funnel"></i> Filter</h5>
+    </div>
+    <div class="card-body">
+        <form method="GET" action="{{ url_for('maintenance_bp.history') }}">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label for="printer_id" class="form-label">Drucker</label>
+                    <select name="printer_id" id="printer_id" class="form-select">
+                        <option value="">Alle Drucker</option>
+                        {% for printer in printers %}
+                        <option value="{{ printer.id }}" 
+                                {% if selected_printer == printer.id %}selected{% endif %}>
+                            {{ printer.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-6"></div>
+                <div class="col-md-2">
+                    <label class="form-label">&nbsp;</label>
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-search"></i> Filtern
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Statistiken -->
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body text-center">
+                <h6 class="text-muted">Gesamte Einträge</h6>
+                <h2 class="display-4">{{ logs | length }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body text-center">
+                <h6 class="text-muted">Letzte Wartung</h6>
+                <h3>
+                    {% if logs %}
+                        {{ logs[0].timestamp.strftime('%d.%m.%Y') }}
+                    {% else %}
+                        -
+                    {% endif %}
+                </h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body text-center">
+                <h6 class="text-muted">Gewartete Drucker</h6>
+                <h2 class="display-4">
+                    {{ logs | map(attribute='printer_id') | unique | list | length }}
+                </h2>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Verlaufstabelle -->
+<div class="card">
+    <div class="card-header">
+        <h5>Wartungsprotokoll</h5>
+    </div>
+    <div class="card-body">
+        {% if logs %}
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th>Datum & Zeit</th>
+                        <th>Drucker</th>
+                        <th>Aufgabentyp</th>
+                        <th>Durchgeführt von</th>
+                        <th>Notizen</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in logs %}
+                    <tr>
+                        <td>
+                            <strong>{{ log.timestamp.strftime('%d.%m.%Y') }}</strong><br>
+                            <small class="text-muted">{{ log.timestamp.strftime('%H:%M') }} Uhr</small>
+                        </td>
+                        <td>
+                            <a href="{{ url_for('printers_bp.printer_details', printer_id=log.printer.id) }}">
+                                {{ log.printer.name }}
+                            </a>
+                        </td>
+                        <td>
+                            <span class="badge bg-secondary">{{ log.task_type.value }}</span>
+                        </td>
+                        <td>{{ log.user.username }}</td>
+                        <td>
+                            {% if log.notes %}
+                                <button class="btn btn-sm btn-outline-info" 
+                                        data-bs-toggle="modal" 
+                                        data-bs-target="#notesModal{{ log.id }}">
+                                    <i class="bi bi-eye"></i> Anzeigen
+                                </button>
+                                
+                                <!-- Modal -->
+                                <div class="modal fade" id="notesModal{{ log.id }}" tabindex="-1">
+                                    <div class="modal-dialog modal-lg">
+                                        <div class="modal-content">
+                                            <div class="modal-header">
+                                                <h5 class="modal-title">Wartungsnotizen</h5>
+                                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                            </div>
+                                            <div class="modal-body">
+                                                <p><strong>Drucker:</strong> {{ log.printer.name }}</p>
+                                                <p><strong>Datum:</strong> {{ log.timestamp.strftime('%d.%m.%Y %H:%M') }}</p>
+                                                <hr>
+                                                <pre class="bg-dark p-3 rounded" style="white-space: pre-wrap;">{{ log.notes }}</pre>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="alert alert-info mb-0">
+            <i class="bi bi-info-circle-fill me-2"></i>
+            Keine Wartungseinträge gefunden.
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

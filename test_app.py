@@ -1,0 +1,89 @@
+import pytest
+from app import create_app, db
+from models import User, Printer, Job, UserRole, JobStatus
+from werkzeug.security import generate_password_hash
+
+@pytest.fixture(scope='module')
+def test_app():
+    """Erstellt eine Flask-App für die Tests mit einer In-Memory-SQLite-Datenbank."""
+    app = create_app()
+    app.config.from_mapping(
+        TESTING=True,
+        SQLALCHEMY_DATABASE_URI='sqlite:///:memory:',
+        WTF_CSRF_ENABLED=False,
+        LOGIN_DISABLED=False,
+        SERVER_NAME='localhost.test' # Notwendig für url_for außerhalb eines Requests
+    )
+    with app.app_context():
+        db.create_all()
+        yield app
+        db.drop_all()
+
+@pytest.fixture(scope='module')
+def test_client(test_app):
+    return test_app.test_client()
+
+@pytest.fixture(scope='function')
+def init_database(test_app):
+    with test_app.app_context():
+        db.create_all()
+        admin = User(username='admin', role=UserRole.ADMIN, password_hash=generate_password_hash('password'))
+        db.session.add(admin)
+        printer = Printer(name='Test Printer', model='MK4', historical_print_hours=100, historical_jobs_count=10)
+        db.session.add(printer)
+        db.session.commit()
+        yield db
+        db.session.remove()
+        db.drop_all()
+
+# === MODEL-TESTS ===
+def test_user_model(init_database):
+    user = User.query.filter_by(username='admin').first()
+    assert user is not None
+    assert user.check_password('password')
+
+def test_printer_model_properties(init_database):
+    printer = Printer.query.filter_by(name='Test Printer').first()
+    assert printer.total_jobs_count == 10
+    new_job = Job(name='New Test Job', status=JobStatus.COMPLETED, printer_id=printer.id, actual_print_duration_s=3600)
+    db.session.add(new_job)
+    db.session.commit()
+    assert printer.total_jobs_count == 11
+    assert printer.total_print_hours == 101.0
+
+# === ROUTEN-TESTS ===
+
+def test_login_page(test_client):
+    response = test_client.get('/auth/login')
+    assert response.status_code == 200
+    assert b"Anmelden" in response.data
+
+def test_successful_login_and_redirect(test_client, init_database):
+    response = test_client.post('/auth/login', data=dict(
+        username='admin',
+        password='password'
+    ), follow_redirects=True)
+    assert response.status_code == 200
+    assert b"Dashboard" in response.data
+    assert b"Abmelden" in response.data
+
+def test_failed_login(test_client, init_database):
+    response = test_client.post('/auth/login', data=dict(
+        username='admin',
+        password='wrong_password'
+    ), follow_redirects=True)
+    assert response.status_code == 200
+    assert b"Ung" in response.data # Prüft auf "Ungültiger..."
+    assert b"Dashboard" not in response.data
+
+def test_protected_route_unauthorized(test_client):
+    response = test_client.get('/', follow_redirects=False)
+    assert response.status_code == 302
+    assert '/auth/login' in response.headers['Location']
+
+def test_logout(test_client, init_database):
+    test_client.post('/auth/login', data=dict(username='admin', password='password'))
+    response = test_client.get('/auth/logout', follow_redirects=True)
+    assert response.status_code == 200
+    assert b"Anmelden" in response.data
+    assert b"Abmelden" not in response.data

@@ -1,0 +1,225 @@
+{% extends "base.html" %}
+
+{% block title %}Verbrauchsmaterial verwalten{% endblock %}
+
+{% block head_extra %}
+<style>
+    .consumable-card {
+        transition: transform 0.2s;
+        height: 100%;
+    }
+    .consumable-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    }
+    .consumable-image {
+        height: 200px;
+        object-fit: cover;
+        background-color: #2d3236;
+    }
+    .stock-badge {
+        font-size: 1.1rem;
+        padding: 0.5rem 1rem;
+    }
+    .hazard-symbol {
+        width: 40px;
+        height: 40px;
+        margin: 2px;
+    }
+    .filter-bar {
+        background-color: #2d3236;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        margin-bottom: 1.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="main-header">
+    <h1><i class="bi bi-box-seam"></i> Verbrauchsmaterial</h1>
+    <div class="header-actions">
+        <a href="{{ url_for('consumables_bp.add_consumable') }}" class="btn btn-success">
+            <i class="bi bi-plus-lg"></i> Neues Material hinzufügen
+        </a>
+    </div>
+</div>
+
+<!-- Filter-Bar -->
+<div class="filter-bar">
+    <form method="GET" class="row g-3">
+        <div class="col-md-3">
+            <label for="category" class="form-label">Kategorie</label>
+            <select name="category" id="category" class="form-select" onchange="this.form.submit()">
+                <option value="all" {% if not current_category or current_category == 'all' %}selected{% endif %}>Alle Kategorien</option>
+                {% for cat in categories %}
+                <option value="{{ cat.name }}" {% if current_category == cat.name %}selected{% endif %}>{{ cat.value }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label for="status" class="form-label">Status</label>
+            <select name="status" id="status" class="form-select" onchange="this.form.submit()">
+                <option value="" {% if not current_status %}selected{% endif %}>Alle Status</option>
+                <option value="critical" {% if current_status == 'critical' %}selected{% endif %}>Kritischer Bestand</option>
+                <option value="low_stock" {% if current_status == 'low_stock' %}selected{% endif %}>Niedriger Bestand</option>
+                <option value="expired" {% if current_status == 'expired' %}selected{% endif %}>Abgelaufen</option>
+                <option value="expiring" {% if current_status == 'expiring' %}selected{% endif %}>Läuft bald ab</option>
+            </select>
+        </div>
+        <div class="col-md-4">
+            <label for="search" class="form-label">Suche</label>
+            <input type="text" name="search" id="search" class="form-control" placeholder="Name, Hersteller, Artikelnummer..." value="{{ search_query }}">
+        </div>
+        <div class="col-md-2 d-flex align-items-end">
+            <button type="submit" class="btn btn-primary me-2"><i class="bi bi-search"></i> Suchen</button>
+            <a href="{{ url_for('consumables_bp.list_consumables') }}" class="btn btn-secondary"><i class="bi bi-x-lg"></i></a>
+        </div>
+    </form>
+</div>
+
+<!-- Statistik-Karten -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card bg-danger">
+            <div class="card-body text-center">
+                <h3>{{ consumables | selectattr('is_critical_stock') | list | length }}</h3>
+                <p class="mb-0">Kritischer Bestand</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-warning text-dark">
+            <div class="card-body text-center">
+                <h3>{{ consumables | selectattr('is_low_stock') | list | length }}</h3>
+                <p class="mb-0">Niedriger Bestand</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-info text-dark">
+            <div class="card-body text-center">
+                <h3>{{ consumables | selectattr('is_expired') | list | length }}</h3>
+                <p class="mb-0">Abgelaufen</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-secondary">
+            <div class="card-body text-center">
+                <h3>{{ consumables | length }}</h3>
+                <p class="mb-0">Gesamt</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Materialien als Karten-Grid -->
+<div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 row-cols-xl-4 g-4">
+    {% for consumable in consumables %}
+    <div class="col">
+        <div class="card consumable-card h-100">
+            <!-- Bild -->
+            <a href="{{ url_for('consumables_bp.view_consumable', consumable_id=consumable.id) }}">
+                {% if consumable.image_url %}
+                <img src="{{ url_for('static', filename=consumable.image_url) }}" class="card-img-top consumable-image" alt="{{ consumable.name }}">
+                {% else %}
+                <div class="consumable-image d-flex align-items-center justify-content-center">
+                    <i class="bi bi-box-seam" style="font-size: 4rem; color: #6c757d;"></i>
+                </div>
+                {% endif %}
+            </a>
+            
+            <div class="card-body d-flex flex-column">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <h5 class="card-title mb-0">
+                        <a href="{{ url_for('consumables_bp.view_consumable', consumable_id=consumable.id) }}" class="text-decoration-none">
+                            {{ consumable.name }}
+                        </a>
+                    </h5>
+                    <span class="badge bg-secondary">{{ consumable.category.value }}</span>
+                </div>
+                
+                {% if consumable.manufacturer %}
+                <p class="text-muted small mb-2"><i class="bi bi-building"></i> {{ consumable.manufacturer }}</p>
+                {% endif %}
+                
+                <!-- Lagerbestand -->
+                <div class="mb-2">
+                    <span class="stock-badge badge 
+                        {% if consumable.stock_status == 'critical' %}bg-danger
+                        {% elif consumable.stock_status == 'low' %}bg-warning text-dark
+                        {% elif consumable.stock_status == 'full' %}bg-success
+                        {% else %}bg-secondary{% endif %}">
+                        {{ consumable.stock_level }} {{ consumable.unit }}
+                    </span>
+                </div>
+                
+                <!-- Gefahrensymbole -->
+                {% if consumable.hazard_symbols %}
+                <div class="mb-2">
+                    {% for symbol in consumable.get_hazard_symbols_list() %}
+                    <img src="{{ url_for('static', filename='hazard_symbols/' ~ symbol.split(' - ')[0] ~ '.png') }}" 
+                         class="hazard-symbol" 
+                         title="{{ symbol }}" 
+                         alt="{{ symbol }}">
+                    {% endfor %}
+                </div>
+                {% endif %}
+                
+                <!-- Ablaufdatum -->
+                {% if consumable.has_expiry and consumable.expiry_date %}
+                <div class="mb-2">
+                    <small class="{% if consumable.is_expired %}text-danger{% elif consumable.is_expiring_soon %}text-warning{% else %}text-muted{% endif %}">
+                        <i class="bi bi-calendar-x"></i> 
+                        {% if consumable.is_expired %}
+                        Abgelaufen: {{ consumable.expiry_date.strftime('%d.%m.%Y') }}
+                        {% else %}
+                        Verfällt: {{ consumable.expiry_date.strftime('%d.%m.%Y') }}
+                        {% endif %}
+                    </small>
+                </div>
+                {% endif %}
+                
+                <!-- Drucker-Zuordnung -->
+                {% if consumable.compatible_printers | length > 0 %}
+                <div class="mb-2">
+                    <small class="text-info">
+                        <i class="bi bi-printer"></i> {{ consumable.compatible_printers | length }} Drucker
+                    </small>
+                </div>
+                {% endif %}
+                
+                <div class="mt-auto pt-2">
+                    <div class="btn-group w-100" role="group">
+                        <a href="{{ url_for('consumables_bp.view_consumable', consumable_id=consumable.id) }}" 
+                           class="btn btn-sm btn-outline-info" title="Details">
+                            <i class="bi bi-eye-fill"></i>
+                        </a>
+                        <a href="{{ url_for('consumables_bp.edit_consumable', consumable_id=consumable.id) }}" 
+                           class="btn btn-sm btn-outline-primary" title="Bearbeiten">
+                            <i class="bi bi-pencil-fill"></i>
+                        </a>
+                        <button type="button" class="btn btn-sm btn-outline-danger" title="Löschen"
+                                data-bs-toggle="modal"
+                                data-bs-target="#confirmDeleteModal"
+                                data-item-type="Verbrauchsmaterial"
+                                data-item-name="{{ consumable.name }}"
+                                data-form-action="{{ url_for('consumables_bp.delete_consumable', consumable_id=consumable.id) }}">
+                            <i class="bi bi-trash-fill"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="col-12">
+        <div class="alert alert-info text-center">
+            Kein Verbrauchsmaterial gefunden. 
+            <a href="{{ url_for('consumables_bp.add_consumable') }}" class="alert-link">Jetzt hinzufügen!</a>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

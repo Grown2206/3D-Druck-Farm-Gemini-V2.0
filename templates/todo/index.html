@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+
+{% block title %}To-Do Liste{% endblock %}
+
+{% block head_extra %}
+<script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+{% endblock %}
+
+{% block content %}
+<div class="main-header">
+    <h1><i class="bi bi-check2-square"></i> To-Do Liste</h1>
+    <a href="{{ url_for('todo_bp.export_csv') }}" class="btn btn-info">
+        <i class="bi bi-download"></i> CSV Exportieren
+    </a>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5>Aufgaben nach Status</h5>
+            </div>
+            <div class="card-content">
+                <div id="status-chart"></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5>Aufgaben nach Kategorie</h5>
+            </div>
+            <div class="card-content">
+                <div id="category-chart"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<div class="row">
+    <div class="col-lg-4 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h4>Neue Aufgabe erstellen</h4>
+            </div>
+            <div class="card-content">
+                <form id="todo-form" method="POST" action="{{ url_for('todo_bp.index') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Beschreibung*</label>
+                        <textarea id="description" name="description" class="form-control" rows="3" required></textarea>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="category" class="form-label">Kategorie</label>
+                            <select id="category" name="category" class="form-select">
+                                {% for cat in ToDoCategory %}
+                                <option value="{{ cat.name }}">{{ cat.value }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="status" class="form-label">Status</label>
+                            <select id="status" name="status" class="form-select">
+                                {% for stat in ToDoStatus %}
+                                <option value="{{ stat.name }}">{{ stat.value }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                     <div class="row">
+                        <div class="col-md-6 mb-3">
+                             <label for="assigned_to_id" class="form-label">Zuweisen an</label>
+                            <select id="assigned_to_id" name="assigned_to_id" class="form-select">
+                                <option value="">Niemanden</option>
+                                {% for user in users %}
+                                <option value="{{ user.id }}">{{ user.username }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="end_date" class="form-label">Enddatum</label>
+                            <input type="date" id="end_date" name="end_date" class="form-control">
+                        </div>
+                    </div>
+                     <div class="mb-3">
+                        <label for="notes" class="form-label">Bemerkung</label>
+                        <textarea id="notes" name="notes" class="form-control" rows="2"></textarea>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Speichern</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h4>Offene & Zukünftige Aufgaben</h4>
+            </div>
+            <div class="card-content table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead>
+                        <tr>
+                            <th style="width: 40%;">Beschreibung</th>
+                            <th style="width: 15%;">Status</th>
+                            <th>Kategorie</th>
+                            <th>Zugewiesen an</th>
+                            <th>Enddatum</th>
+                            <th>Aktionen</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for todo in todos %}
+                        <tr>
+                            <td title="{{ todo.description }}">{{ todo.description|truncate(80) }}</td>
+                            <td>
+                                <div class="dropdown">
+                                    <button class="btn btn-sm dropdown-toggle status-{{ todo.status.name|lower }}" type="button" data-bs-toggle="dropdown" aria-expanded="false" id="status-btn-{{ todo.id }}">
+                                        {{ todo.status.value }}
+                                    </button>
+                                    <ul class="dropdown-menu">
+                                        {% for status_option in ToDoStatus %}
+                                        <li>
+                                            <a class="dropdown-item status-change-item" href="#" data-todo-id="{{ todo.id }}" data-new-status-name="{{ status_option.name }}">
+                                                {{ status_option.value }}
+                                            </a>
+                                        </li>
+                                        {% endfor %}
+                                    </ul>
+                                </div>
+                            </td>
+                            <td><span class="badge bg-secondary">{{ todo.category.value }}</span></td>
+                            <td>{{ todo.assignee.username if todo.assignee else '-' }}</td>
+                            <td>{{ todo.end_date.strftime('%d.%m.%Y') if todo.end_date else '-' }}</td>
+                            <td>
+                                <a href="{{ url_for('todo_bp.edit_todo', todo_id=todo.id) }}" class="btn btn-sm btn-outline-primary" title="Bearbeiten">
+                                    <i class="bi bi-pencil-fill"></i>
+                                </a>
+                                <button type="button" class="btn btn-sm btn-outline-danger" title="Löschen"
+                                        data-bs-toggle="modal" data-bs-target="#confirmDeleteModal"
+                                        data-item-type="Aufgabe" data-item-name="{{ todo.description|truncate(20) }}"
+                                        data-form-action="{{ url_for('todo_bp.delete_todo', todo_id=todo.id) }}">
+                                    <i class="bi bi-trash-fill"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="6" class="text-center text-muted">Keine Aufgaben vorhanden.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // --- Chart Logic ---
+    const chartOptions = {
+        chart: { type: 'donut', height: 350, foreColor: 'var(--text-300)' },
+        legend: { position: 'bottom' },
+        dataLabels: { enabled: true },
+        tooltip: { theme: 'dark' }
+    };
+
+    const statusChart = new ApexCharts(document.querySelector("#status-chart"), chartOptions);
+    statusChart.render();
+    const categoryChart = new ApexCharts(document.querySelector("#category-chart"), chartOptions);
+    categoryChart.render();
+
+    fetch("{{ url_for('api_bp.todo_stats_by_status') }}")
+        .then(res => res.json())
+        .then(data => {
+            if(data.series.length > 0){
+                statusChart.updateOptions({
+                    labels: data.labels,
+                    series: data.series
+                });
+            }
+        });
+    
+    fetch("{{ url_for('api_bp.todo_stats_by_category') }}")
+        .then(res => res.json())
+        .then(data => {
+             if(data.series.length > 0){
+                categoryChart.updateOptions({
+                    labels: data.labels,
+                    series: data.series
+                });
+            }
+        });
+
+    // --- NEU: Logik für das direkte Ändern des Status ---
+    document.querySelectorAll('.status-change-item').forEach(item => {
+        item.addEventListener('click', function(event) {
+            event.preventDefault(); // Verhindert, dass die Seite zum "#" scrollt
+            
+            const todoId = this.dataset.todoId;
+            const newStatusName = this.dataset.newStatusName;
+
+            fetch(`/api/todo/${todoId}/status`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify({ status: newStatusName })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    // UI direkt aktualisieren, ohne Neuladen
+                    const statusButton = document.getElementById(`status-btn-${todoId}`);
+                    statusButton.textContent = data.new_status_value;
+                    // Alte CSS-Klasse entfernen und neue hinzufügen
+                    statusButton.className = `btn btn-sm dropdown-toggle status-${data.new_status_name.toLowerCase()}`;
+                    // Diagramme neu laden
+                    statusChart.destroy();
+                    categoryChart.destroy();
+                    statusChart.render();
+                    categoryChart.render();
+                } else {
+                    alert('Fehler: ' + data.message);
+                }
+            })
+            .catch(error => console.error('Error:', error));
+        });
+    });
+});
+</script>
+{% endblock %}

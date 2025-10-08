@@ -1,0 +1,678 @@
+# /models.py
+import datetime
+import enum
+import random
+import string
+from werkzeug.security import generate_password_hash, check_password_hash
+from flask_login import UserMixin
+from extensions import db
+import uuid
+from sqlalchemy.types import TypeDecorator, VARCHAR
+from sqlalchemy.dialects.sqlite import JSON
+import json
+from sqlalchemy import func
+
+# Association Table for SlicerProfile <-> Printer
+slicer_profile_printers = db.Table('slicer_profile_printers',
+    db.Column('slicer_profile_id', db.Integer, db.ForeignKey('slicer_profile.id'), primary_key=True),
+    db.Column('printer_id', db.Integer, db.ForeignKey('printer.id'), primary_key=True)
+)
+
+# Association Table for SlicerProfile <-> FilamentType
+slicer_profile_filaments = db.Table('slicer_profile_filaments',
+    db.Column('slicer_profile_id', db.Integer, db.ForeignKey('slicer_profile.id'), primary_key=True),
+    db.Column('filament_type_id', db.Integer, db.ForeignKey('filament_type.id'), primary_key=True)
+)
+
+# Association Table for Consumable <-> Printer
+consumable_printers = db.Table('consumable_printers',
+    db.Column('consumable_id', db.Integer, db.ForeignKey('consumable.id'), primary_key=True),
+    db.Column('printer_id', db.Integer, db.ForeignKey('printer.id'), primary_key=True)
+)
+
+
+class RobustEnum(TypeDecorator):
+    impl = VARCHAR
+    cache_ok = True
+
+    def __init__(self, enum_class, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._enum_class = enum_class
+
+    def process_bind_param(self, value, dialect):
+        if isinstance(value, self._enum_class):
+            return value.value
+        return value
+
+    def process_result_value(self, value, dialect):
+        if value is None: return None
+        value_lower = str(value).lower()
+        for member in self._enum_class:
+            if member.value.lower() == value_lower or member.name.lower() == value_lower:
+                return member
+        if self._enum_class is CameraSource and str(value).upper() == 'NONE':
+            return CameraSource.NONE
+        return None
+
+# --- Enums ---
+class UserRole(str, enum.Enum):
+    ADMIN = 'Admin'
+    OPERATOR = 'Operator'
+
+class PrinterStatus(str, enum.Enum):
+    IDLE = 'Idle'
+    PRINTING = 'Printing'
+    QUEUED = 'Queued'
+    MAINTENANCE = 'Maintenance'
+    OFFLINE = 'Offline'
+    ERROR = 'Error'
+
+class JobQuality(str, enum.Enum):
+    NOT_REVIEWED = 'Nicht geprüft'
+    SUCCESSFUL = 'Erfolgreich'
+    FAILED = 'Fehlgeschlagen'
+
+class JobStatus(str, enum.Enum):
+    PENDING = 'Pending'
+    ASSIGNED = 'Assigned'
+    QUEUED = 'Queued'
+    PRINTING = 'Printing'
+    COMPLETED = 'Completed'
+    FAILED = 'Failed'
+    CANCELLED = 'Cancelled'
+    BATCHED = 'Gebündelt'
+
+class APIType(str, enum.Enum):
+    NONE = 'Manuell'
+    KLIPPER = 'Klipper (Moonraker)'
+    OCTOPRINT = 'OctoPrint'
+
+class CameraSource(str, enum.Enum):
+    NONE = 'Keine'
+    NETWORK_URL = 'Netzwerk URL'
+    USB_STREAMER = 'USB-Kamera (via Streamer)'
+
+class MaintenanceTaskType(str, enum.Enum):
+    CHECKLIST = 'Checklisten-Wartung'
+    GENERAL = 'Allgemeine Wartung'
+    LUBRICATION = 'Schmierung'
+    CALIBRATION = 'Kalibrierung'
+    BELT_TENSION = 'Riemenspannung'
+    NOZZLE_CHANGE = 'Düsenwechsel'
+    COMPONENT_REPLACEMENT = 'Komponententausch'
+    CLEANING = 'Reinigung'
+    OTHER = 'Sonstiges'
+
+class MaintenanceTaskCategory(str, enum.Enum):
+    MECHANICS = 'Mechanik'
+    ELECTRONICS = 'Elektronik'
+    CALIBRATION = 'Kalibrierung'
+    CLEANING = 'Reinigung'
+    GENERAL = 'Allgemein'
+
+class PrinterType(str, enum.Enum):
+    FDM = 'FDM'
+    SLA = 'SLA'
+    SLS = 'SLS'
+    OTHER = 'Andere'
+
+class BedType(str, enum.Enum):
+    GLASS = 'Glas'
+    PEI_SMOOTH = 'PEI (Glatt)'
+    PEI_TEXTURED = 'PEI (Texturiert)'
+    MAGNETIC = 'Magnetisch (Flexplate)'
+    GAROLITE = 'Garolith'
+    OTHER = 'Andere'
+
+class ToDoCategory(str, enum.Enum):
+    GENERAL = 'Allgemein'
+    MAINTENANCE = 'Wartung'
+    IMPROVEMENT = 'Verbesserung'
+    BUGFIX = 'Fehlerbehebung'
+    FEATURE = 'Neues Feature'
+
+class ToDoStatus(str, enum.Enum):
+    OPEN = 'Offen'
+    IN_PROGRESS = 'In Bearbeitung'
+    DONE = 'Erledigt'
+    ON_HOLD = 'Zurückgestellt'
+    
+class LayoutItemType(str, enum.Enum):
+    PRINTER = 'Drucker'
+    TABLE = 'Tisch'
+    SHELF = 'Regal'
+    OBJECT = 'Objekt'
+
+class ConsumableCategory(str, enum.Enum):
+    NOZZLE = 'Düsen'
+    BUILDPLATE = 'Druckbett'
+    BELT = 'Riemen'
+    LUBRICANT = 'Schmiermittel'
+    CLEANING = 'Reinigungsmittel'
+    ADHESIVE = 'Haftmittel'
+    TOOL = 'Werkzeug'
+    SPARE_PART = 'Ersatzteil'
+    ELECTRONIC = 'Elektronik'
+    MECHANICAL = 'Mechanik'
+    CONSUMABLE = 'Verbrauchsmaterial'
+    OTHER = 'Sonstiges'
+
+class HazardSymbol(str, enum.Enum):
+    GHS01_EXPLOSIVE = 'GHS01 - Explosiv'
+    GHS02_FLAMMABLE = 'GHS02 - Entzündbar'
+    GHS03_OXIDIZING = 'GHS03 - Oxidierend'
+    GHS04_COMPRESSED_GAS = 'GHS04 - Gase unter Druck'
+    GHS05_CORROSIVE = 'GHS05 - Ätzend'
+    GHS06_TOXIC = 'GHS06 - Giftig'
+    GHS07_HARMFUL = 'GHS07 - Gesundheitsschädlich'
+    GHS08_HEALTH_HAZARD = 'GHS08 - Gesundheitsgefahr'
+    GHS09_ENVIRONMENTAL = 'GHS09 - Umweltgefährlich'
+
+
+# --- Models ---
+
+class SlicerProfile(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    slicer_args = db.Column(db.Text, nullable=True) 
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    filename = db.Column(db.String(255), nullable=True)
+    gcode_files = db.relationship('GCodeFile', backref='slicer_profile', lazy='dynamic')
+    printers = db.relationship('Printer', secondary=slicer_profile_printers, back_populates='slicer_profiles', lazy='dynamic')
+    compatible_filaments = db.relationship('FilamentType', secondary=slicer_profile_filaments, back_populates='slicer_profiles', lazy='dynamic')
+
+
+class GCodeFile(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    filename = db.Column(db.String(255), nullable=False, unique=True)
+    source_stl_filename = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    estimated_print_time_min = db.Column(db.Integer, nullable=True)
+    material_needed_g = db.Column(db.Float, nullable=True)
+    filament_needed_mm = db.Column(db.Float, nullable=True)
+    tool_changes = db.Column(db.Integer, nullable=True)
+    preview_image_filename = db.Column(db.String(255), nullable=True)
+    layer_count = db.Column(db.Integer, nullable=True)
+    dimensions_x_mm = db.Column(db.Float, nullable=True)
+    dimensions_y_mm = db.Column(db.Float, nullable=True)
+    filament_per_tool = db.Column(db.Text, nullable=True)
+    material_type = db.Column(db.String(50), nullable=True)
+    layer_height_mm = db.Column(db.Float, nullable=True)
+    slicer_profile_id = db.Column(db.Integer, db.ForeignKey('slicer_profile.id'), nullable=True)
+    jobs = db.relationship('Job', backref='gcode_file', lazy='dynamic')
+    cost_calculations = db.relationship('CostCalculation', backref='gcode_file', lazy='dynamic', cascade="all, delete-orphan")
+
+    @property
+    def preview_image_url(self):
+        if self.preview_image_filename:
+            return f'uploads/gcode/{self.preview_image_filename}'
+        return None
+
+class User(UserMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    password_hash = db.Column(db.String(256))
+    role = db.Column(RobustEnum(UserRole), default=UserRole.OPERATOR, nullable=False)
+    maintenance_logs = db.relationship('MaintenanceLog', back_populates='user', lazy='dynamic')
+    created_todos = db.relationship('ToDo', foreign_keys='ToDo.created_by_id', back_populates='creator', lazy='dynamic')
+    assigned_todos = db.relationship('ToDo', foreign_keys='ToDo.assigned_to_id', back_populates='assignee', lazy='dynamic')
+
+    def set_password(self, password): self.password_hash = generate_password_hash(password)
+    def check_password(self, password): return check_password_hash(self.password_hash, password)
+
+class Printer(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(80), unique=True, nullable=False)
+    model = db.Column(db.String(120))
+    status = db.Column(RobustEnum(PrinterStatus), default=PrinterStatus.IDLE, nullable=False)
+    printer_type = db.Column(RobustEnum(PrinterType), default=PrinterType.FDM, nullable=False)
+    max_speed = db.Column(db.Integer, nullable=True)
+    max_acceleration = db.Column(db.Integer, nullable=True)
+    extruder_count = db.Column(db.Integer, default=1, nullable=False)
+    heated_chamber = db.Column(db.Boolean, default=False)
+    heated_chamber_temp = db.Column(db.Integer, nullable=True)
+    bed_type = db.Column(RobustEnum(BedType), default=BedType.PEI_TEXTURED, nullable=False)
+    purchase_cost = db.Column(db.Float, nullable=True)
+    cost_per_hour = db.Column(db.Float, nullable=True)
+    power_consumption_w = db.Column(db.Integer, nullable=True)
+    energy_price_kwh = db.Column(db.Float, nullable=True)
+    commissioning_date = db.Column(db.Date, nullable=True)
+    useful_life_years = db.Column(db.Integer, nullable=True)
+    salvage_value = db.Column(db.Float, nullable=True)
+    annual_maintenance_cost = db.Column(db.Float, nullable=True)
+    annual_operating_hours = db.Column(db.Integer, nullable=True)
+    imputed_interest_rate = db.Column(db.Float, nullable=True)
+    camera_source = db.Column(RobustEnum(CameraSource), default=CameraSource.NONE, nullable=False)
+    webcam_url = db.Column(db.String(255), nullable=True) 
+    compatible_material_types = db.Column(db.String(200), default='')
+    image_url = db.Column(db.String(255), nullable=True)
+    build_volume_l = db.Column(db.Float, nullable=True)
+    build_volume_w = db.Column(db.Float, nullable=True)
+    build_volume_h = db.Column(db.Float, nullable=True)
+    has_enclosure = db.Column(db.Boolean, default=False)
+    has_filter = db.Column(db.Boolean, default=False)
+    has_camera = db.Column(db.Boolean, default=False)
+    has_led = db.Column(db.Boolean, default=False)
+    has_ace = db.Column(db.Boolean, default=False)
+    max_nozzle_temp = db.Column(db.Integer, nullable=True)
+    max_bed_temp = db.Column(db.Integer, nullable=True)
+    
+    historical_print_hours = db.Column(db.Float, default=0.0)
+    historical_filament_used_g = db.Column(db.Float, default=0.0)
+    historical_jobs_count = db.Column(db.Integer, default=0)
+    
+    location = db.Column(db.String(100), nullable=True)
+    last_maintenance_date = db.Column(db.Date, nullable=True)
+    notes = db.Column(db.Text, nullable=True)
+    ip_address = db.Column(db.String(45), nullable=True)
+    api_key = db.Column(db.String(64), nullable=True)
+    api_type = db.Column(RobustEnum(APIType), default=APIType.NONE, nullable=False)
+    maintenance_interval_h = db.Column(db.Integer, nullable=True)
+    last_maintenance_h = db.Column(db.Float, default=0.0)
+    last_nozzle_change_h = db.Column(db.Float, default=0.0)
+    last_belt_tension_date = db.Column(db.Date, nullable=True)
+    maintenance_checklist_state = db.Column(JSON, nullable=True)
+    z_offset = db.Column(db.Float, nullable=True)
+    last_vibration_calibration_date = db.Column(db.Date, nullable=True)
+    flow_rate_result = db.Column(db.Float, nullable=True)
+    pressure_advance_result = db.Column(db.Float, nullable=True)
+    max_volumetric_speed_result = db.Column(db.Float, nullable=True)
+    vfa_optimal_speed = db.Column(db.Integer, nullable=True)
+    flow_rate_settings = db.Column(JSON, nullable=True)
+    pressure_advance_settings = db.Column(JSON, nullable=True)
+    vfa_test_settings = db.Column(JSON, nullable=True)
+
+    jobs = db.relationship('Job', backref='assigned_printer', lazy='dynamic', cascade="all, delete-orphan")
+    status_logs = db.relationship('PrinterStatusLog', backref='printer', lazy='dynamic', cascade="all, delete-orphan")
+    maintenance_logs = db.relationship('MaintenanceLog', backref='printer', lazy='dynamic', cascade="all, delete-orphan")
+    slicer_profiles = db.relationship('SlicerProfile', secondary=slicer_profile_printers, back_populates='printers', lazy='dynamic')
+    assigned_spools = db.relationship('FilamentSpool', backref='assigned_printer', lazy='dynamic', cascade="all, delete-orphan")
+
+    @property
+    def total_print_hours(self):
+        new_seconds = db.session.query(func.sum(Job.actual_print_duration_s)).filter(Job.printer_id == self.id, Job.status == JobStatus.COMPLETED).scalar() or 0
+        new_hours = new_seconds / 3600
+        return round((self.historical_print_hours or 0) + new_hours, 1)
+
+    @property
+    def total_filament_used_g(self):
+        new_grams = db.session.query(func.sum(GCodeFile.material_needed_g)).join(Job).filter(Job.printer_id == self.id, Job.status == JobStatus.COMPLETED).scalar() or 0
+        return round((self.historical_filament_used_g or 0) + (new_grams or 0), 2)
+    
+    @property
+    def total_jobs_count(self):
+        new_jobs_count = self.jobs.filter(Job.status == JobStatus.COMPLETED).count()
+        return (self.historical_jobs_count or 0) + new_jobs_count
+
+    @property
+    def calculated_cost_per_hour(self):
+        cost = self.purchase_cost or 0
+        salvage = self.salvage_value or 0
+        life_years = self.useful_life_years or 0
+        maintenance = self.annual_maintenance_cost or 0
+        op_hours = self.annual_operating_hours or 0
+        interest_rate = self.imputed_interest_rate or 0
+        if not all([cost > 0, life_years > 0, op_hours > 0]):
+            return None
+        depreciation_per_year = (cost - salvage) / life_years
+        avg_capital = (cost + salvage) / 2
+        interest_per_year = avg_capital * (interest_rate / 100)
+        total_annual_cost = depreciation_per_year + interest_per_year + maintenance
+        cost_per_hour = total_annual_cost / op_hours
+        return round(cost_per_hour, 2)
+
+    def get_current_job(self): return self.jobs.filter(Job.status == JobStatus.PRINTING).first()
+    
+    def get_active_or_next_job(self):
+        printing_job = self.get_current_job()
+        if printing_job:
+            return printing_job
+        next_job = self.jobs.filter(
+            Job.status.in_([JobStatus.QUEUED, JobStatus.ASSIGNED])
+        ).order_by(Job.priority.desc(), Job.created_at.asc()).first()
+        return next_job
+
+class MaintenanceLog(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    printer_id = db.Column(db.Integer, db.ForeignKey('printer.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    task_type = db.Column(RobustEnum(MaintenanceTaskType), nullable=False)
+    notes = db.Column(db.Text, nullable=True)
+    user = db.relationship('User', back_populates='maintenance_logs')
+
+class Job(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(150), nullable=False)
+    status = db.Column(RobustEnum(JobStatus), default=JobStatus.PENDING, nullable=False)
+    priority = db.Column(db.Integer, default=1)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    start_time = db.Column(db.DateTime, nullable=True)
+    end_time = db.Column(db.DateTime, nullable=True)
+    completed_at = db.Column(db.DateTime, nullable=True)
+    actual_print_duration_s = db.Column(db.Integer, nullable=True)
+    printer_id = db.Column(db.Integer, db.ForeignKey('printer.id'), nullable=True)
+    gcode_file_id = db.Column(db.Integer, db.ForeignKey('g_code_file.id'), nullable=True)
+    quality_assessment = db.Column(RobustEnum(JobQuality), default=JobQuality.NOT_REVIEWED, nullable=False)
+    is_archived = db.Column(db.Boolean, default=False, nullable=False)
+    source_stl_filename = db.Column(db.String(255), nullable=True)
+    required_filament_type_id = db.Column(db.Integer, db.ForeignKey('filament_type.id'), nullable=True)
+    required_filament_type = db.relationship('FilamentType')
+    preparation_time_min = db.Column(db.Integer, nullable=True)
+    post_processing_time_min = db.Column(db.Integer, nullable=True)
+    employee_hourly_rate = db.Column(db.Float, nullable=True)
+    material_cost = db.Column(db.Float, nullable=True)
+    machine_cost = db.Column(db.Float, nullable=True)
+    personnel_cost = db.Column(db.Float, nullable=True)
+    total_cost = db.Column(db.Float, nullable=True)
+    material_number = db.Column(db.String(50), nullable=True)
+    material_short_text = db.Column(db.String(100), nullable=True)
+    target_quantity_parts = db.Column(db.Integer, nullable=True)
+    estimated_end_date = db.Column(db.Date, nullable=True)
+    snapshots = db.relationship('PrintSnapshot', backref='job', lazy='dynamic', cascade="all, delete-orphan")
+
+    def get_elapsed_and_total_time_seconds(self):
+        total_seconds = 0
+        if self.gcode_file and self.gcode_file.estimated_print_time_min:
+            total_seconds = self.gcode_file.estimated_print_time_min * 60
+        elapsed_seconds = 0
+        if self.status == JobStatus.PRINTING and self.start_time:
+            elapsed_seconds = (datetime.datetime.utcnow() - self.start_time).total_seconds()
+        return {'elapsed': elapsed_seconds, 'total': total_seconds}
+
+    def get_manual_progress(self):
+        time_data = self.get_elapsed_and_total_time_seconds()
+        elapsed = time_data['elapsed']
+        total = time_data['total']
+        if total > 0:
+            progress = (elapsed / total) * 100
+            return min(100, progress)
+        return 0
+
+class PrintSnapshot(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    job_id = db.Column(db.Integer, db.ForeignKey('job.id'), nullable=False)
+    image_filename = db.Column(db.String(255), nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    is_failure = db.Column(db.Boolean, default=False, nullable=False)
+
+class FilamentType(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    manufacturer = db.Column(db.String(100), nullable=False)
+    name = db.Column(db.String(100), nullable=False)
+    material_type = db.Column(db.String(30), nullable=False)
+    color_hex = db.Column(db.String(7), nullable=False, default='#FFFFFF')
+    density_gcm3 = db.Column(db.Float, default=1.24)
+    diameter_mm = db.Column(db.Float, default=1.75)
+    cost_per_spool = db.Column(db.Float)
+    spool_weight_g = db.Column(db.Integer, default=1000)
+    reorder_level_g = db.Column(db.Integer)
+    currency = db.Column(db.String(10), default='EUR')
+    datasheet_url = db.Column(db.String(255))
+    print_settings = db.Column(db.Text)
+    notes = db.Column(db.Text)
+    spools = db.relationship('FilamentSpool', backref='filament_type', lazy='dynamic', cascade="all, delete-orphan")
+    slicer_profiles = db.relationship('SlicerProfile', secondary=slicer_profile_filaments, back_populates='compatible_filaments', lazy='dynamic')
+    
+    __table_args__ = (db.UniqueConstraint('manufacturer', 'name', 'material_type', name='_manufacturer_name_type_uc'),)
+
+    def get_print_settings(self):
+        if not self.print_settings: return {}
+        try: return json.loads(self.print_settings)
+        except json.JSONDecodeError: return {}
+        
+    @property
+    def total_spool_count(self):
+        return self.spools.count()
+
+    @property
+    def available_spool_count(self):
+        return self.spools.filter(FilamentSpool.is_in_use == False, FilamentSpool.current_weight_g > 0).count()
+
+    @property
+    def total_remaining_weight(self):
+        total_weight = db.session.query(func.sum(FilamentSpool.current_weight_g)).filter(FilamentSpool.filament_type_id == self.id).scalar()
+        return total_weight or 0
+
+    def is_color_light(self):
+        hex_color = self.color_hex.lstrip('#')
+        if len(hex_color) != 6: return False
+        r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
+        luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+        return luminance > 0.5
+
+class FilamentSpool(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    filament_type_id = db.Column(db.Integer, db.ForeignKey('filament_type.id'), nullable=False)
+    short_id = db.Column(db.String(4), unique=True, nullable=False)
+    initial_weight_g = db.Column(db.Integer, default=1000)
+    current_weight_g = db.Column(db.Integer, nullable=False)
+    purchase_date = db.Column(db.Date)
+    is_in_use = db.Column(db.Boolean, default=False, nullable=False)
+    assigned_to_printer_id = db.Column(db.Integer, db.ForeignKey('printer.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    notes = db.Column(db.Text)
+    is_drying = db.Column(db.Boolean, default=False, nullable=False, server_default='0')
+    drying_start_time = db.Column(db.DateTime, nullable=True)
+    drying_temp = db.Column(db.Integer, nullable=True)
+    drying_humidity = db.Column(db.Integer, nullable=True)
+    
+    def __init__(self, *args, **kwargs):
+        super(FilamentSpool, self).__init__(*args, **kwargs)
+        if not self.short_id:
+            self.short_id = self.generate_short_id()
+
+    @staticmethod
+    def generate_short_id():
+        while True:
+            short_id = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))
+            if not FilamentSpool.query.filter_by(short_id=short_id).first():
+                return short_id
+
+    @property
+    def remaining_percentage(self):
+        if self.current_weight_g is not None and self.initial_weight_g and self.initial_weight_g > 0:
+            return max(0, min(100, round((self.current_weight_g / self.initial_weight_g) * 100)))
+        return 0
+
+class SystemSetting(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    key = db.Column(db.String(50), unique=True, nullable=False)
+    value = db.Column(db.String(255), nullable=False)
+
+class Consumable(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    
+    # Basis-Informationen
+    name = db.Column(db.String(100), nullable=False)
+    category = db.Column(RobustEnum(ConsumableCategory), default=ConsumableCategory.OTHER, nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    usage_description = db.Column(db.Text, nullable=True)
+    
+    # Lagerbestand
+    stock_level = db.Column(db.Integer, default=0)
+    unit = db.Column(db.String(20), default='Stück')
+    min_stock = db.Column(db.Integer, nullable=True)
+    reorder_level = db.Column(db.Integer, nullable=True)
+    max_stock = db.Column(db.Integer, nullable=True)
+    storage_location = db.Column(db.String(100), nullable=True)
+    
+    # Lieferanten-Informationen
+    manufacturer = db.Column(db.String(100), nullable=True)
+    supplier = db.Column(db.String(100), nullable=True)
+    article_number = db.Column(db.String(50), nullable=True)
+    ean = db.Column(db.String(13), nullable=True)
+    
+    # Preis-Informationen
+    unit_price = db.Column(db.Float, nullable=True)
+    currency = db.Column(db.String(10), default='EUR')
+    last_ordered_date = db.Column(db.Date, nullable=True)
+    last_order_quantity = db.Column(db.Integer, nullable=True)
+    
+    # Haltbarkeit
+    has_expiry = db.Column(db.Boolean, default=False, nullable=False)
+    expiry_date = db.Column(db.Date, nullable=True)
+    
+    # Medien
+    image_filename = db.Column(db.String(255), nullable=True)
+    datasheet_url = db.Column(db.String(255), nullable=True)
+    
+    # Sicherheit (JSON-Felder)
+    hazard_symbols = db.Column(JSON, nullable=True)
+    safety_warnings = db.Column(JSON, nullable=True)
+    
+    # Technische Daten
+    specifications = db.Column(JSON, nullable=True)
+    compatibility_tags = db.Column(db.String(255), nullable=True)
+    
+    # Metadaten
+    notes = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    
+    # Beziehungen
+    compatible_printers = db.relationship('Printer', secondary=consumable_printers, backref=db.backref('consumables', lazy='dynamic'))
+    
+    @property
+    def image_url(self):
+        if self.image_filename:
+            return f'uploads/consumables/{self.image_filename}'
+        return None
+    
+    @property
+    def is_low_stock(self):
+        if self.reorder_level is not None:
+            return self.stock_level <= self.reorder_level
+        return False
+    
+    @property
+    def is_critical_stock(self):
+        if self.min_stock is not None:
+            return self.stock_level < self.min_stock
+        return False
+    
+    @property
+    def is_expired(self):
+        if self.has_expiry and self.expiry_date:
+            return self.expiry_date < datetime.date.today()
+        return False
+    
+    @property
+    def is_expiring_soon(self):
+        if self.has_expiry and self.expiry_date:
+            days_until_expiry = (self.expiry_date - datetime.date.today()).days
+            return 0 < days_until_expiry <= 30
+        return False
+    
+    @property
+    def stock_status(self):
+        if self.is_critical_stock:
+            return 'critical'
+        elif self.is_low_stock:
+            return 'low'
+        elif self.max_stock and self.stock_level >= self.max_stock:
+            return 'full'
+        return 'normal'
+    
+    @property
+    def total_value(self):
+        if self.unit_price:
+            return round(self.stock_level * self.unit_price, 2)
+        return 0
+    
+    def get_hazard_symbols_list(self):
+        if self.hazard_symbols:
+            return self.hazard_symbols if isinstance(self.hazard_symbols, list) else []
+        return []
+    
+    def get_safety_warnings_list(self):
+        if self.safety_warnings:
+            return self.safety_warnings if isinstance(self.safety_warnings, list) else []
+        return []
+    
+    def get_specifications(self):
+        if self.specifications:
+            return self.specifications if isinstance(self.specifications, dict) else {}
+        return {}
+    
+    def get_compatibility_tags_list(self):
+        if self.compatibility_tags:
+            return [tag.strip() for tag in self.compatibility_tags.split(',') if tag.strip()]
+        return []
+    
+    def __repr__(self):
+        return f'<Consumable {self.name}>'
+
+class PrinterStatusLog(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    printer_id = db.Column(db.Integer, db.ForeignKey('printer.id'), nullable=False)
+    status = db.Column(RobustEnum(PrinterStatus), nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+
+class CostCalculation(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(150), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    gcode_file_id = db.Column(db.Integer, db.ForeignKey('g_code_file.id'), nullable=False)
+    filament_type_id = db.Column(db.Integer, db.ForeignKey('filament_type.id'), nullable=False)
+    printer_id = db.Column(db.Integer, db.ForeignKey('printer.id'), nullable=False)
+    preparation_time_min = db.Column(db.Integer, default=0)
+    post_processing_time_min = db.Column(db.Integer, default=0)
+    employee_hourly_rate = db.Column(db.Float, default=0)
+    margin_percent = db.Column(db.Float, default=0)
+    material_cost = db.Column(db.Float)
+    machine_cost = db.Column(db.Float)
+    personnel_cost = db.Column(db.Float)
+    total_cost_without_margin = db.Column(db.Float)
+    total_price = db.Column(db.Float)
+    filament_type = db.relationship('FilamentType')
+    printer = db.relationship('Printer')
+
+class ToDo(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    description = db.Column(db.Text, nullable=False)
+    category = db.Column(RobustEnum(ToDoCategory), default=ToDoCategory.GENERAL, nullable=False)
+    status = db.Column(RobustEnum(ToDoStatus), default=ToDoStatus.OPEN, nullable=False)
+    start_date = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    end_date = db.Column(db.Date, nullable=True)
+    notes = db.Column(db.Text, nullable=True)
+    created_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    assigned_to_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    creator = db.relationship('User', foreign_keys=[created_by_id], back_populates='created_todos')
+    assignee = db.relationship('User', foreign_keys=[assigned_to_id], back_populates='assigned_todos')
+
+class MaintenanceTaskDefinition(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(150), nullable=False, unique=True)
+    description = db.Column(db.Text, nullable=True)
+    category = db.Column(RobustEnum(MaintenanceTaskCategory), default=MaintenanceTaskCategory.GENERAL, nullable=False)
+    interval_hours = db.Column(db.Integer, nullable=True)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    instruction_url = db.Column(db.String(255), nullable=True)
+    required_consumable_id = db.Column(db.Integer, db.ForeignKey('consumable.id'), nullable=True)
+    required_consumable_quantity = db.Column(db.Integer, default=1)
+    required_consumable = db.relationship('Consumable')
+    
+class LayoutItem(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    item_type = db.Column(db.Enum(LayoutItemType), nullable=False)
+    model_path = db.Column(db.String(255), nullable=False)
+    position_x = db.Column(db.Float, default=0.0)
+    position_y = db.Column(db.Float, default=0.0)
+    position_z = db.Column(db.Float, default=0.0)
+    rotation_x = db.Column(db.Float, default=0.0)
+    rotation_y = db.Column(db.Float, default=0.0)
+    rotation_z = db.Column(db.Float, default=0.0)
+    scale_x = db.Column(db.Float, default=1.0)
+    scale_y = db.Column(db.Float, default=1.0)
+    scale_z = db.Column(db.Float, default=1.0)
+    is_visible = db.Column(db.Boolean, default=True, nullable=False, server_default='1')
+    color = db.Column(db.String(7), nullable=True)
+    printer_id = db.Column(db.Integer, db.ForeignKey('printer.id'), nullable=True)
+    printer = db.relationship('Printer', backref='layout_item', uselist=False)
+
+    def __repr__(self):
+        return f'<LayoutItem {self.name}>'

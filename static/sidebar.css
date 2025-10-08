@@ -1,0 +1,116 @@
+/* static/sidebar.css */
+
+body {
+    overflow-x: hidden;
+}
+
+#sidebar {
+    width: 280px;
+    min-height: 100vh;
+    transition: all 0.3s;
+    box-shadow: 3px 3px 10px rgba(0, 0, 0, 0.2);
+}
+
+#main-content {
+    width: calc(100% - 280px);
+    transition: all 0.3s;
+}
+
+/* --- EINGEKLAPPTER ZUSTAND --- */
+#sidebar.collapsed {
+    width: 80px;
+}
+
+#sidebar.collapsed .sidebar-text,
+#sidebar.collapsed .nav-label {
+    display: none;
+}
+
+#sidebar.collapsed .sidebar-logo {
+    width: 32px;
+    height: 32px;
+}
+
+#sidebar.collapsed .dropdown-toggle::after {
+    display: none;
+}
+
+#sidebar.collapsed .nav-link {
+    justify-content: center;
+}
+#sidebar.collapsed .sidebar-icon{
+    margin-right: 0 !important;
+}
+
+#sidebar.collapsed .dropdown-menu {
+    position: absolute !important;
+    left: 100% !important;
+    top: 0 !important;
+    margin-top: 0 !important;
+    margin-left: .5rem !important;
+}
+
+#main-content.expanded {
+    width: calc(100% - 80px);
+}
+
+/* --- ALLGEMEINE STYLES --- */
+.sidebar-logo {
+    border-radius: 5px;
+    max-height: 40px;
+    transition: all 0.3s;
+}
+.sidebar-icon {
+    height: 1.1rem; 
+    vertical-align: text-bottom;
+}
+
+#sidebar .nav-link {
+    color: #adb5bd;
+    display: flex;
+    align-items: center;
+}
+
+#sidebar .nav-link:hover {
+    background-color: #495057;
+    color: #fff;
+}
+
+#sidebar .nav-link.active {
+    background-color: #0d6efd;
+    color: white;
+}
+#sidebar .nav-link .bi-chevron-down {
+    transition: transform 0.3s;
+}
+#sidebar .nav-link[aria-expanded="true"] .bi-chevron-down {
+    transform: rotate(180deg);
+}
+
+#sidebar .dropdown-toggle::after {
+    display: none;
+}
+
+/* --- RESPONSIVE: MOBILE & TABLET --- */
+@media (max-width: 991.98px) {
+    #sidebar {
+        margin-left: -280px; /* Standardmäßig ausblenden */
+        position: fixed;
+        top: 0;
+        bottom: 0;
+        z-index: 1050; /* Über dem Inhalt */
+    }
+    
+    #sidebar.offcanvas.offcanvas-start.show {
+        margin-left: 0;
+    }
+
+    #main-content {
+        width: 100%;
+    }
+    
+    #sidebar.collapsed, #main-content.expanded {
+        width: 100%;
+        margin-left: 0;
+    }
+}

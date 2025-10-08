@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+
+{% block title %}Druckerdetails: {{ printer.name }}{% endblock %}
+
+{% block content %}
+<div class="main-header">
+    <h1><i class="bi bi-printer"></i> Druckerdetails: {{ printer.name }}</h1>
+    <div class="header-actions">
+        <a href="{{ url_for('printers_bp.edit_printer', printer_id=printer.id) }}" class="btn btn-primary me-2">
+            <i class="bi bi-pencil-fill"></i> Bearbeiten
+        </a>
+        <a href="{{ url_for('printers_bp.list_printers') }}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left"></i> Zurück zur Übersicht
+        </a>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-4">
+        <div class="card mb-4">
+            <img src="{{ url_for('static', filename=printer.image_url) if printer.image_url else url_for('static', filename='Logo.jpg') }}" class="card-img-top" alt="Druckerbild">
+            <div class="card-body">
+                <h5 class="card-title">{{ printer.name }}</h5>
+                <p class="card-text text-muted">{{ printer.model or 'Kein Modell angegeben' }}</p>
+                <span class="badge rounded-pill bg-info text-dark fs-6">Status: {{ printer.status.value }}</span>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="bi bi-graph-up-arrow"></i> Betriebsstatistik</h5>
+            </div>
+            <div class="list-group list-group-flush">
+                <div class="list-group-item d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-clock-history me-2"></i> Gesamte Druckzeit</span>
+                    <span class="badge bg-primary rounded-pill">{{ "%.2f"|format(printer.total_print_hours or 0) }} h</span>
+                </div>
+                <div class="list-group-item d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-fuel-pump me-2"></i> Verbrauchtes Filament</span>
+                    <span class="badge bg-primary rounded-pill">{{ "%.0f"|format(printer.total_filament_used_g or 0) }} g</span>
+                </div>
+                <div class="list-group-item d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-check2-square me-2"></i> Abgeschlossene Drucke</span>
+                    <span class="badge bg-primary rounded-pill">{{ printer.total_jobs_count or 0 }}</span>
+                </div>
+                 <div class="list-group-item d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-tools me-2"></i> Letzte Wartung</span>
+                    <span class="badge bg-secondary rounded-pill">{{ printer.last_maintenance_date.strftime('%d.%m.%Y') if printer.last_maintenance_date else 'N/A' }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <ul class="nav nav-tabs card-header-tabs" id="printerDetailsTab" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="specs-tab" data-bs-toggle="tab" data-bs-target="#specs" type="button" role="tab" aria-controls="specs" aria-selected="true">
+                            <i class="bi bi-gear-wide-connected"></i> Spezifikationen
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="costs-tab" data-bs-toggle="tab" data-bs-target="#costs" type="button" role="tab" aria-controls="costs" aria-selected="false">
+                           <i class="bi bi-currency-euro"></i> Kosten &amp; Wirtschaftlichkeit
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="maintenance-tab" data-bs-toggle="tab" data-bs-target="#maintenance" type="button" role="tab" aria-controls="maintenance" aria-selected="false">
+                           <i class="bi bi-wrench-adjustable-circle"></i> Wartung
+                        </button>
+                    </li>
+                     <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="jobs-tab" data-bs-toggle="tab" data-bs-target="#jobs" type="button" role="tab" aria-controls="jobs" aria-selected="false">
+                            <i class="bi bi-list-task"></i> Zugeordnete Aufträge
+                        </button>
+                    </li>
+                </ul>
+            </div>
+            <div class="card-body tab-content" id="printerDetailsTabContent">
+                <div class="tab-pane fade show active" id="specs" role="tabpanel" aria-labelledby="specs-tab">
+                    <h5 class="card-title">Technische Details</h5>
+                     <ul class="list-group list-group-flush">
+                        <li class="list-group-item"><strong>Standort:</strong> {{ printer.location or 'N/A' }}</li>
+                        <li class="list-group-item"><strong>Druckertyp:</strong> {{ printer.printer_type.value if printer.printer_type else 'N/A' }}</li>
+                        <li class="list-group-item"><strong>Bauraum (BxTxH):</strong> {{ "%.0f x %.0f x %.0f mm"|format(printer.build_volume_w, printer.build_volume_l, printer.build_volume_h) if printer.build_volume_w else 'N/A' }}</li>
+                        <li class="list-group-item"><strong>Druckbett:</strong> {{ printer.bed_type.value if printer.bed_type else 'N/A' }}</li>
+                        <li class="list-group-item"><strong>Anzahl Extruder:</strong> {{ printer.extruder_count }}</li>
+                        <li class="list-group-item"><strong>Kompatible Materialien:</strong> {{ printer.compatible_material_types or 'Keine Angabe' }}</li>
+                        <li class="list-group-item"><strong>API-Typ:</strong> {{ printer.api_type.value if printer.api_type else 'N/A' }} ({{ printer.ip_address or 'Keine IP' }})</li>
+                        <li class="list-group-item"><strong>Kamera:</strong> {{ printer.camera_source.value if printer.camera_source else 'N/A' }}</li>
+                    </ul>
+                    <h5 class="card-title mt-4">Features</h5>
+                    <p>
+                        {% if printer.has_enclosure %}<span class="badge bg-success">Einhausung</span>{% endif %}
+                        {% if printer.heated_chamber %}<span class="badge bg-success">Beheizter Bauraum</span>{% endif %}
+                        {% if printer.has_camera %}<span class="badge bg-success">Kamera</span>{% endif %}
+                        {% if printer.has_filter %}<span class="badge bg-success">Luftfilter</span>{% endif %}
+                        {% if printer.has_led %}<span class="badge bg-success">Beleuchtung</span>{% endif %}
+                        {% if printer.has_ace %}<span class="badge bg-success">Input Shaping</span>{% endif %}
+                    </p>
+                    {% if printer.notes %}
+                        <h5 class="card-title mt-4">Notizen</h5>
+                        <p class="text-break">{{ printer.notes }}</p>
+                    {% endif %}
+                </div>
+
+                <div class="tab-pane fade" id="costs" role="tabpanel" aria-labelledby="costs-tab">
+                    <h5 class="card-title">Kostenkalkulation</h5>
+                    <div class="alert alert-info">
+                        Diese Werte werden für die automatische Kostenberechnung im <a href="{{ url_for('calculator_bp.index') }}" class="alert-link">Kostenkalkulator</a> verwendet.
+                    </div>
+                     <ul class="list-group list-group-flush">
+                        <li class="list-group-item"><strong>Anschaffungskosten:</strong> {{ "%.2f €"|format(printer.purchase_cost) if printer.purchase_cost else 'N/A' }}</li>
+                        <li class="list-group-item"><strong>Nutzungsdauer:</strong> {{ "%d Jahre"|format(printer.useful_life_years) if printer.useful_life_years else 'N/A' }}</li>
+                        <li class="list-group-item"><strong>Kalk. Restwert:</strong> {{ "%.2f €"|format(printer.salvage_value) if printer.salvage_value else 'N/A' }}</li>
+                        <li class="list-group-item"><strong>Stromverbrauch:</strong> {{ "%d W"|format(printer.power_consumption_w) if printer.power_consumption_w else 'N/A' }}</li>
+                        <li class="list-group-item"><strong>Strompreis:</strong> {{ "%.4f €/kWh"|format(printer.energy_price_kwh) if printer.energy_price_kwh else 'N/A' }}</li>
+                        <li class="list-group-item"><strong>Manuell gesetzte Maschinenkosten:</strong> {{ "%.2f €/h"|format(printer.cost_per_hour) if printer.cost_per_hour else 'Nicht gesetzt' }}</li>
+                        <li class="list-group-item"><strong>Automatisch berechnete Maschinenkosten:</strong>
+                            {% if printer.calculated_cost_per_hour %}
+                                <span class="fw-bold text-success">{{ "%.2f €/h"|format(printer.calculated_cost_per_hour) }}</span>
+                            {% else %}
+                                <span class="text-muted">Nicht genügend Daten für Berechnung.</span>
+                            {% endif %}
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="tab-pane fade" id="maintenance" role="tabpanel" aria-labelledby="maintenance-tab">
+                     {% include 'printers/_combined_maintenance.html' %}
+                </div>
+
+                <div class="tab-pane fade" id="jobs" role="tabpanel" aria-labelledby="jobs-tab">
+                    <h5 class="card-title">Aktuelle & anstehende Aufträge</h5>
+                     <div class="table-responsive">
+                        <table class="table table-hover align-middle">
+                            <thead>
+                                <tr>
+                                    <th>Auftrag</th>
+                                    <th>Status</th>
+                                    <th>Priorität</th>
+                                    <th>Erstellt am</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {# KORREKTUR: 'models.Job' verwenden, da Job nicht direkt im Kontext ist #}
+                                {% set active_jobs = printer.jobs.filter(models.Job.status.in_(['ASSIGNED', 'QUEUED', 'PRINTING'])).order_by(models.Job.priority.desc()).all() %}
+                                {% for job in active_jobs %}
+                                <tr>
+                                    <td><a href="{{ url_for('jobs_bp.job_details', job_id=job.id) }}">{{ job.name }}</a></td>
+                                    <td><span class="badge bg-info">{{ job.status.value }}</span></td>
+                                    <td>{{ job.priority }}</td>
+                                    <td>{{ job.created_at.strftime('%d.%m.%Y %H:%M') }}</td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="4" class="text-center text-muted">Keine aktiven Aufträge für diesen Drucker.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

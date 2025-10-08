@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+
+{% block title %}Live Werkstatt-Ansicht{% endblock %}
+
+{% block head_extra %}
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="main-header">
+    <h1><i class="bi bi-camera-video-fill"></i> Live Werkstatt-Ansicht</h1>
+</div>
+
+<div class="live-view-grid">
+    {% for printer in printers %}
+    <div class="card printer-live-card status-{{ printer.status.value }}" id="live-card-{{ printer.id }}">
+        <div class="card-header">
+            <h2><a href="{{ url_for('printers_bp.printer_details', printer_id=printer.id) }}">{{ printer.name }}</a></h2>
+            <span class="badge" id="live-badge-{{ printer.id }}">{{ printer.status.value }}</span>
+        </div>
+        <div class="card-content">
+            {% if printer.webcam_url %}
+            <img id="webcam-{{ printer.id }}" src="{{ printer.webcam_url }}" alt="Webcam-Feed für {{ printer.name }}" class="webcam-image" 
+                 onerror="this.onerror=null; this.src='{{ url_for('static', filename='placeholder.png') }}'; this.classList.add('error');">
+            {% else %}
+            <div class="webcam-placeholder">
+                <i class="bi bi-camera-video-off"></i>
+                <span>Keine Webcam konfiguriert</span>
+            </div>
+            {% endif %}
+            
+            <div class="live-info">
+                <div class="live-job" id="live-job-{{ printer.id }}">-</div>
+                <div class="progress-bar-container">
+                    <div class="progress" id="live-progress-{{ printer.id }}" style="width: 0%;"></div>
+                </div>
+                <div class="live-temps">
+                    <span id="live-nozzle-{{ printer.id }}"><i class="bi bi-thermometer-half"></i> --°C</span>
+                    <span id="live-bed-{{ printer.id }}"><i class="bi bi-grid-3x3-gap-fill"></i> --°C</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <p>Keine Drucker konfiguriert.</p>
+    {% endfor %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const socket = io();
+
+    function updateWebcams() {
+        document.querySelectorAll('.webcam-image').forEach(img => {
+            // Nur aktualisieren, wenn kein Fehler aufgetreten ist
+            if (!img.classList.contains('error')) {
+                const originalSrc = img.src.split('?')[0]; // Entferne alten Timestamp
+                img.src = originalSrc + '?t=' + new Date().getTime(); // Füge neuen Timestamp hinzu, um Caching zu umgehen
+            }
+        });
+    }
+
+    // Alle 10 Sekunden die Webcams aktualisieren
+    setInterval(updateWebcams, 10000);
+
+    socket.on('status_update', function(data) {
+        for (const printerId in data) {
+            const printerData = data[printerId];
+            const card = document.getElementById(`live-card-${printerId}`);
+            if (!card) continue;
+
+            const status = printerData.state || 'Offline';
+            const badge = document.getElementById(`live-badge-${printerId}`);
+            const jobName = document.getElementById(`live-job-${printerId}`);
+            const progressBar = document.getElementById(`live-progress-${printerId}`);
+            const nozzleTemp = document.getElementById(`live-nozzle-${printerId}`);
+            const bedTemp = document.getElementById(`live-bed-${printerId}`);
+
+            card.className = `card printer-live-card status-${status.replace(/\s+/g, '')}`;
+            
+            if (badge) {
+                badge.textContent = status;
+                badge.className = 'badge'; // Reset classes, rely on parent for color
+            }
+
+            if (jobName) {
+                jobName.textContent = printerData.filename || 'Kein aktiver Job';
+            }
+
+            if (progressBar) {
+                progressBar.style.width = `${printerData.progress || 0}%`;
+            }
+            
+            if (nozzleTemp) {
+                nozzleTemp.innerHTML = `<i class="bi bi-thermometer-half"></i> ${printerData.temps?.nozzle_actual?.toFixed(1) || '--'}°C`;
+            }
+            if (bedTemp) {
+                bedTemp.innerHTML = `<i class="bi bi-grid-3x3-gap-fill"></i> ${printerData.temps?.bed_actual?.toFixed(1) || '--'}°C`;
+            }
+        }
+    });
+
+    // Initiales Laden der Webcams
+    updateWebcams();
+});
+</script>
+{% endblock %}

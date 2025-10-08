@@ -1,0 +1,96 @@
+<div class="card h-100 filament-card {% if spool.is_in_use %}in-use-border{% elif spool.is_drying %}drying-border{% endif %}">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span class="badge bg-dark font-monospace">{{ spool.short_id }}</span>
+        <span class="fw-bold">{{ spool.filament_type.manufacturer }}</span>
+    </div>
+
+    <div class="card-body d-flex flex-column">
+        {# NEU: Visualisierung wieder hinzugefügt #}
+        <div class="spool-visualization mb-3">
+            <div class="spool-filament-color" style="background-color: {{ spool.filament_type.color_hex }};"></div>
+            
+            {% if spool.filament_type.is_color_light() %}
+                <img src="{{ url_for('static', filename='spule_cover_dark.png') }}" class="spool-cover" alt="Dunkles Spulen-Cover">
+            {% else %}
+                <img src="{{ url_for('static', filename='spule_cover_light.png') }}" class="spool-cover" alt="Helles Spulen-Cover">
+            {% endif %}
+        </div>
+
+        <h5 class="card-title fs-6">{{ spool.filament_type.name }} <span class="badge bg-secondary fw-normal">{{ spool.filament_type.material_type }}</span></h5>
+        
+        <p class="card-text text-muted mb-2 small">
+            {% if spool.is_drying %}
+                <i class="bi bi-thermometer-sun text-warning"></i> <strong>Im Trockner</strong>
+            {% elif spool.assigned_printer %}
+                <i class="bi bi-printer-fill text-success"></i> <strong>{{ spool.assigned_printer.name }}</strong>
+            {% else %}
+                <i class="bi bi-box-fill text-secondary"></i> <strong>Im Lager</strong>
+            {% endif %}
+        </p>
+
+        <div class="mt-auto">
+            <div class="d-flex justify-content-between small">
+                 <span>{{ spool.current_weight_g }}g</span>
+                 <span>{{ spool.initial_weight_g }}g</span>
+            </div>
+            <div class="progress" style="height: 15px;">
+                <div class="progress-bar" role="progressbar" 
+                     style="width: {{ spool.remaining_percentage }}%; background-color: {{ spool.filament_type.color_hex }};" 
+                     aria-valuenow="{{ spool.remaining_percentage }}" aria-valuemin="0" aria-valuemax="100">
+                     <small>{{ spool.remaining_percentage }}%</small>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="card-footer text-center p-2">
+        <div class="btn-group w-100">
+            {% if spool.is_in_use %}
+                <form action="{{ url_for('materials_bp.return_to_storage', spool_id=spool.id) }}" method="POST" class="d-inline w-100">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <button type="submit" class="btn btn-sm btn-outline-secondary w-100"><i class="bi bi-box-arrow-in-down-left"></i> Ins Lager</button>
+                </form>
+            {% else %}
+                 <button class="btn btn-sm btn-outline-primary w-100" data-bs-toggle="modal" data-bs-target="#assignSpoolModal-{{ spool.id }}">
+                    <i class="bi bi-printer"></i> Zuweisen
+                </button>
+                {# --- NEU: LÖSCHEN-BUTTON --- #}
+                <button type="button" class="btn btn-sm btn-outline-danger" title="Spule löschen"
+                        data-bs-toggle="modal"
+                        data-bs-target="#confirmDeleteModal"
+                        data-item-type="Spule"
+                        data-item-name="{{ spool.short_id }} ({{ spool.filament_type.name }})"
+                        data-form-action="{{ url_for('materials_bp.delete_spool', spool_id=spool.id) }}">
+                    <i class="bi bi-trash-fill"></i>
+                </button>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="assignSpoolModal-{{ spool.id }}" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form action="{{ url_for('materials_bp.assign_to_printer') }}" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <input type="hidden" name="spool_id" value="{{ spool.id }}">
+        <div class="modal-header">
+          <h5 class="modal-title">Spule {{ spool.short_id }} zuweisen</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p>Wählen Sie den Drucker aus, auf dem die Spule geladen werden soll.</p>
+          <select name="printer_id" class="form-select" required>
+            <option value="" disabled selected>-- Drucker auswählen --</option>
+            {% for printer in printers %}
+              <option value="{{ printer.id }}">{{ printer.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+          <button type="submit" class="btn btn-primary">Spule zuweisen</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

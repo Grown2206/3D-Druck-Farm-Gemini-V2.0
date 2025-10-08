@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+
+{% block title %}Auftragsübersicht{% endblock %}
+{% block page_title %}Auftragsübersicht{% endblock %}
+
+{% macro sortable_header(column_key, column_name) %}
+    {% set direction = 'asc' if current_sort == column_key and current_direction == 'desc' else 'desc' %}
+    <a href="{{ url_for('jobs_bp.list_jobs', sort_by=column_key, direction=direction, status=current_status, search=search_term) }}" class="text-decoration-none text-white">
+        {{ column_name }}
+        {% if current_sort == column_key %}
+            {% if current_direction == 'asc' %}<i class="bi bi-sort-up"></i>{% else %}<i class="bi bi-sort-down"></i>{% endif %}
+        {% endif %}
+    </a>
+{% endmacro %}
+
+{% block content %}
+<div class="main-header">
+    <h1><i class="bi bi-card-list"></i> Aktive Aufträge</h1>
+    <div class="header-actions">
+        <a href="{{ url_for('jobs_bp.add_job') }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Neuen Auftrag erstellen</a>
+        <a href="{{ url_for('jobs_bp.archive_list') }}" class="btn btn-outline-info"><i class="bi bi-archive-fill"></i> Archiv anzeigen</a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <div class="row g-2 align-items-center">
+            <div class="col-lg-auto">
+                <div class="btn-group" role="group">
+                    <a href="{{ url_for('jobs_bp.list_jobs', search=search_term) }}" class="btn btn-sm btn-outline-light {% if not current_status %}active{% endif %}">Alle</a>
+                    {% for status in models.JobStatus %}
+                    <a href="{{ url_for('jobs_bp.list_jobs', status=status.name, search=search_term) }}" class="btn btn-sm btn-outline-light {% if current_status == status.name %}active{% endif %}">{{ status.value }}</a>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="col-lg">
+                <form method="get" action="{{ url_for('jobs_bp.list_jobs') }}">
+                    <div class="input-group">
+                        <input type="text" name="search" class="form-control form-control-sm" placeholder="Auftragsname suchen..." value="{{ search_term or '' }}">
+                        <input type="hidden" name="status" value="{{ current_status or '' }}">
+                        <button class="btn btn-sm btn-outline-secondary" type="submit"><i class="bi bi-search"></i> Suchen</button>
+                    </div>
+                </form>
+            </div>
+             <div class="col-lg-auto">
+                 <form action="{{ url_for('jobs_bp.import_csv') }}" method="post" enctype="multipart/form-data" class="d-flex">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <input type="file" name="file" class="form-control form-control-sm me-2" accept=".csv" required>
+                    <button type="submit" class="btn btn-sm btn-secondary"><i class="bi bi-upload"></i> Import</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="card-content table-responsive">
+        <table class="table table-hover align-middle">
+            <thead>
+                <tr>
+                    <th>{{ sortable_header('name', 'Auftragsname') }}</th>
+                    <th>{{ sortable_header('status', 'Status') }}</th>
+                    <th class="text-center">{{ sortable_header('priority', 'Priorität') }}</th>
+                    <th>Drucker</th>
+                    <th>Benötigtes Material</th>
+                    <th>{{ sortable_header('created_at', 'Erstellt am') }}</th>
+                    <th>Geschätzte Zeit</th>
+                    <th>Aktionen</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for job in jobs %}
+                <tr class="clickable-row" data-href="{{ url_for('jobs_bp.job_details', job_id=job.id) }}">
+                    <td>
+                        <a href="{{ url_for('jobs_bp.job_details', job_id=job.id) }}">{{ job.name }}</a>
+                        {% if job.target_quantity_parts %}<br><small class="text-muted">Menge: {{ job.target_quantity_parts }} Stk.</small>{% endif %}
+                    </td>
+                    <td><span class="badge status-{{ job.status.name|lower }}">{{ job.status.value }}</span></td>
+                    <td class="text-center">{{ job.priority }}</td>
+                    <td>
+                        {% if job.assigned_printer %}<a href="{{ url_for('printers_bp.printer_details', printer_id=job.printer_id) }}">{{ job.assigned_printer.name }}</a>
+                        {% else %}<span class="text-muted">Nicht zugewiesen</span>{% endif %}
+                    </td>
+                     <td>
+                        {% if job.required_filament_type %}<span class="badge" style="background-color: {{ job.required_filament_type.color_hex }}; color: {{ '#000' if job.required_filament_type.is_color_light() else '#FFF' }};">{{ job.required_filament_type.name }} ({{ job.required_filament_type.material_type }})</span>
+                        {% else %}<span class="text-muted">Keine Angabe</span>{% endif %}
+                    </td>
+                    <td>{{ job.created_at.strftime('%d.%m.%Y %H:%M') }}</td>
+                    <td>
+                        {% if job.gcode_file and job.gcode_file.estimated_print_time_min %}~ {{ (job.gcode_file.estimated_print_time_min / 60)|round(1) }} h{% else %}-{% endif %}
+                    </td>
+                    <td>
+                        <div class="btn-group" role="group">
+                            {% if job.gcode_file %}<a href="{{ url_for('visualizer_bp.view_gcode', gcode_file_id=job.gcode_file.id) }}" class="btn btn-sm btn-outline-info" title="3D-Vorschau"><i class="bi bi-badge-3d-fill"></i></a>{% endif %}
+                            {% if job.status in [models.JobStatus.COMPLETED, models.JobStatus.FAILED, models.JobStatus.CANCELLED] %}<a href="{{ url_for('jobs_bp.review_job_page', job_id=job.id) }}" class="btn btn-sm btn-outline-warning" title="Auftrag bewerten"><i class="bi bi-star-fill"></i></a>{% endif %}
+                            
+                            <a href="{{ url_for('jobs_bp.job_details', job_id=job.id, edit=true) }}" class="btn btn-sm btn-outline-primary" title="Bearbeiten"><i class="bi bi-pencil-fill"></i></a>
+                            
+                            <button class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#confirmDeleteModal" data-item-type="Auftrag" data-item-name="{{ job.name }}" data-form-action="{{ url_for('jobs_bp.delete_job', job_id=job.id) }}" title="Löschen"><i class="bi bi-trash-fill"></i></button>
+                            {% if job.status in [models.JobStatus.COMPLETED, models.JobStatus.FAILED, models.JobStatus.CANCELLED] %}<button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#confirmArchiveModal" data-item-name="{{ job.name }}" data-form-action="{{ url_for('jobs_bp.archive_job', job_id=job.id) }}" title="Archivieren"><i class="bi bi-archive-fill"></i></button>{% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="8" class="text-center text-muted">Keine aktiven Aufträge für den gewählten Filter gefunden.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if pagination and pagination.pages > 1 %}
+    <div class="card-footer d-flex justify-content-center">
+        <nav aria-label="Seitennavigation">
+            <ul class="pagination mb-0">
+                <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
+                    <a class="page-link" href="{{ url_for('jobs_bp.list_jobs', page=pagination.prev_num, status=current_status, search=search_term, sort_by=current_sort, direction=current_direction) }}">Vorherige</a>
+                </li>
+                {% for page_num in pagination.iter_pages() %}
+                    {% if page_num %}
+                        <li class="page-item {% if page_num == pagination.page %}active{% endif %}">
+                           <a class="page-link" href="{{ url_for('jobs_bp.list_jobs', page=page_num, status=current_status, search=search_term, sort_by=current_sort, direction=current_direction) }}">{{ page_num }}</a>
+                        </li>
+                    {% else %}
+                        <li class="page-item disabled"><span class="page-link">…</span></li>
+                    {% endif %}
+                {% endfor %}
+                <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
+                    <a class="page-link" href="{{ url_for('jobs_bp.list_jobs', page=pagination.next_num, status=current_status, search=search_term, sort_by=current_sort, direction=current_direction) }}">Nächste</a>
+                </li>
+            </ul>
+        </nav>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.clickable-row').forEach(row => {
+        row.addEventListener('click', event => {
+            const isActionElement = event.target.closest('a, button, [data-bs-toggle="modal"]');
+            if (isActionElement) return;
+            window.location.href = row.dataset.href;
+        });
+    });
+});
+</script>
+{% endblock %}

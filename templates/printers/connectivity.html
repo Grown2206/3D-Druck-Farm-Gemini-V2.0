@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+
+{% block title %}Drucker-Konnektivität testen{% endblock %}
+
+{% block content %}
+<div class="main-header">
+    <h1><i class="bi bi-reception-4"></i> Drucker-Konnektivität</h1>
+    <a href="{{ url_for('printers_bp.list_printers') }}" class="btn btn-secondary">Zurück zur Druckerliste</a>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2>Verbindungstest</h2>
+    </div>
+    <div class="card-content">
+        <p>Hier können Sie die Netzwerkverbindung zu Ihren Druckern überprüfen, die über eine IP-Adresse verfügen.</p>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>IP-Adresse</th>
+                        <th>API Typ</th>
+                        <th>Status</th>
+                        <th>Aktion</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for printer in printers %}
+                    <tr>
+                        <td><a href="{{ url_for('printers_bp.printer_details', printer_id=printer.id) }}">{{ printer.name }}</a></td>
+                        <td>{{ printer.ip_address or 'N/A' }}</td>
+                        <td>{{ printer.api_type.value }}</td>
+                        <td>
+                            <span class="badge" id="status-badge-{{ printer.id }}">Ungetestet</span>
+                        </td>
+                        <td>
+                            {% if printer.ip_address %}
+                            <button class="btn btn-sm btn-primary test-connection-btn" data-printer-id="{{ printer.id }}">
+                                <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true" style="display: none;"></span>
+                                <i class="bi bi-plug-fill"></i> Verbindung testen
+                            </button>
+                            {% else %}
+                            <span class="text-muted">Manuell</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // KORREKTUR: Der CSRF-Token wird direkt aus dem Template übergeben,
+    // um "document.querySelector"-Fehler zu vermeiden.
+    const csrfToken = "{{ csrf_token() }}";
+
+    document.querySelectorAll('.test-connection-btn').forEach(button => {
+        button.addEventListener('click', function() {
+            const printerId = this.dataset.printerId;
+            const badge = document.getElementById(`status-badge-${printerId}`);
+            const spinner = this.querySelector('.spinner-border');
+            const icon = this.querySelector('.bi');
+
+            // Visuelles Feedback starten
+            badge.textContent = 'Teste...';
+            badge.className = 'badge bg-secondary';
+            button.disabled = true;
+            spinner.style.display = 'inline-block';
+            icon.style.display = 'none';
+
+            fetch(`/api/printer/${printerId}/test`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    badge.textContent = 'Online';
+                    badge.className = 'badge bg-success';
+                    alert(`Erfolg: ${data.message}`);
+                } else {
+                    badge.textContent = 'Offline / Fehler';
+                    badge.className = 'badge bg-danger';
+                    alert(`Fehler: ${data.message}`);
+                }
+            })
+            .catch(error => {
+                badge.textContent = 'Fehler';
+                badge.className = 'badge bg-danger';
+                alert('Ein Skript-Fehler ist aufgetreten: ' + error);
+            })
+            .finally(() => {
+                // Visuelles Feedback beenden
+                button.disabled = false;
+                spinner.style.display = 'none';
+                icon.style.display = 'inline-block';
+            });
+        });
+    });
+});
+</script>
+{% endblock %}
+

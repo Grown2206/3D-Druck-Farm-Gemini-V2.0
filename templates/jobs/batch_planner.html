@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+
+{% block title %}Batch-Planung & Nesting{% endblock %}
+
+{% block content %}
+<div class="main-header">
+    <h1><i class="bi bi-grid-3x3-gap-fill"></i> Batch-Planung & Nesting</h1>
+    <div class="header-actions">
+        <a href="{{ url_for('jobs_bp.list_jobs') }}" class="btn btn-secondary"><i class="bi bi-arrow-left"></i> Zurück zur Auftragsliste</a>
+    </div>
+</div>
+
+<div class="alert alert-info" role="alert">
+  <h4 class="alert-heading"><i class="bi bi-info-circle-fill"></i> So funktioniert's:</h4>
+  <p>Wählen Sie Drucker, Material und ein passendes Slicer-Profil. Selektieren Sie anschließend die gewünschten Aufträge und starten Sie den Nesting-Prozess, um sie optimal auf dem Druckbett anzuordnen.</p>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-5">
+        <div class="card shadow-sm">
+            <div class="card-header">
+                <h5>1. Auswahl & Konfiguration</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label for="printer-select" class="form-label">Drucker</label>
+                    <select id="printer-select" class="form-select">
+                        <option selected disabled value="">Bitte Drucker wählen...</option>
+                        {% for printer in printers %}
+                            <option value="{{ printer.id }}">{{ printer.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label for="material-select" class="form-label">Filament-Typ</label>
+                    <select id="material-select" class="form-select">
+                        <option selected disabled value="">Bitte Material wählen...</option>
+                        {% for ftype in filament_types %}
+                            <option value="{{ ftype.id }}">{{ ftype.manufacturer }} - {{ ftype.name }} ({{ ftype.material_type }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label for="profile-select" class="form-label">Slicer-Profil</label>
+                    <select id="profile-select" class="form-select" disabled>
+                        <option selected disabled value="">Zuerst Drucker & Material wählen...</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div class="card shadow-sm mt-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5>2. Kompatible Aufträge</h5>
+                <span id="job-count-badge" class="badge bg-secondary rounded-pill">0</span>
+            </div>
+            <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                <div id="job-list-container">
+                    <p class="text-muted text-center">Bitte zuerst Drucker und Material auswählen.</p>
+                </div>
+            </div>
+            <div class="card-footer text-end">
+                <button id="nesting-btn" class="btn btn-primary btn-lg" disabled>
+                    <i class="bi bi-bounding-box"></i> Druckbett anordnen & Vorschau
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-7">
+        <div class="card shadow-sm">
+            <div class="card-header">
+                <h5>3. Vorschau & Bestätigung</h5>
+            </div>
+            <div class="card-body" id="preview-container" style="min-height: 500px; display: flex; align-items: center; justify-content: center;">
+                 <div class="text-center text-muted p-5">
+                    <i class="bi bi-palette fs-1"></i>
+                    <p>Hier erscheint die Vorschau des angeordneten Druckbetts.</p>
+                </div>
+            </div>
+            <div class="card-footer d-flex justify-content-between align-items-center">
+                <span>Geschätzte Zeit: <strong id="estimated-time">--:--</strong></span>
+                <button id="create-batch-btn" class="btn btn-success btn-lg" disabled>
+                    <i class="bi bi-plus-circle-fill"></i> Batch-Auftrag erstellen
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const printerSelect = document.getElementById('printer-select');
+    const materialSelect = document.getElementById('material-select');
+    const profileSelect = document.getElementById('profile-select');
+    const jobListContainer = document.getElementById('job-list-container');
+    const jobCountBadge = document.getElementById('job-count-badge');
+    const nestingBtn = document.getElementById('nesting-btn');
+    const previewContainer = document.getElementById('preview-container');
+    const estimatedTimeEl = document.getElementById('estimated-time');
+    const createBatchBtn = document.getElementById('create-batch-btn');
+
+    let currentGcodeFilename = null;
+    let selectedJobIds = [];
+
+    function updateProfiles() {
+        const printerId = printerSelect.value;
+        const materialId = materialSelect.value; // Dies ist die filament_type_id
+
+        if (!printerId || !materialId) {
+            profileSelect.innerHTML = '<option selected disabled value="">Zuerst Drucker & Material wählen...</option>';
+            profileSelect.disabled = true;
+            return;
+        }
+
+        fetch("{{ url_for('api_bp.filter_slicer_profiles') }}", {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': "{{ csrf_token() }}" },
+            body: JSON.stringify({ 
+                printer_id: printerId, 
+                filament_type_id: materialId // KORREKTUR: Sendet jetzt die ID
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            profileSelect.innerHTML = '<option selected disabled value="">Bitte Profil wählen...</option>';
+            data.forEach(profile => {
+                const option = document.createElement('option');
+                option.value = profile.id;
+                option.textContent = profile.name;
+                profileSelect.appendChild(option);
+            });
+            profileSelect.disabled = data.length === 0;
+            if(data.length === 0){
+                 profileSelect.innerHTML = '<option selected disabled value="">Keine kompatiblen Profile gefunden</option>';
+            }
+        });
+    }
+
+    function fetchJobs() {
+        const printerId = printerSelect.value;
+        const materialId = materialSelect.value;
+        if (!printerId || !materialId) return;
+
+        jobListContainer.innerHTML = '<div class="text-center"><div class="spinner-border" role="status"><span class="visually-hidden">Lade...</span></div></div>';
+        fetch(`/api/batch-planner/jobs?printer_id=${printerId}&filament_type_id=${materialId}`)
+            .then(response => response.json())
+            .then(jobs => {
+                if (jobs.error) {
+                    jobListContainer.innerHTML = `<p class="text-danger text-center">${jobs.error}</p>`;
+                    jobCountBadge.textContent = '0';
+                    return;
+                }
+                if (jobs.length === 0) {
+                    jobListContainer.innerHTML = '<p class="text-muted text-center">Keine passenden Aufträge gefunden.</p>';
+                    jobCountBadge.textContent = '0';
+                    return;
+                }
+                let jobHtml = '<ul class="list-group list-group-flush">';
+                jobs.forEach(job => {
+                    jobHtml += `<li class="list-group-item"><div class="form-check"><input class="form-check-input job-checkbox" type="checkbox" value="${job.id}" id="job-${job.id}"><label class="form-check-label" for="job-${job.id}"><strong>${job.name}</strong> (Prio: ${job.priority})<br><small class="text-muted">${job.gcode_file}</small></label></div></li>`;
+                });
+                jobHtml += '</ul>';
+                jobListContainer.innerHTML = jobHtml;
+                jobCountBadge.textContent = jobs.length;
+                const checkboxes = jobListContainer.querySelectorAll('.job-checkbox');
+                checkboxes.forEach(cb => {
+                    cb.addEventListener('change', () => {
+                        const anyChecked = Array.from(checkboxes).some(c => c.checked);
+                        nestingBtn.disabled = !anyChecked;
+                    });
+                });
+            });
+    }
+
+    nestingBtn.addEventListener('click', function() {
+        const selectedCheckboxes = document.querySelectorAll('.job-checkbox:checked');
+        selectedJobIds = Array.from(selectedCheckboxes).map(cb => cb.value);
+        if (selectedJobIds.length === 0) { alert('Bitte wählen Sie mindestens einen Auftrag aus.'); return; }
+        
+        const profileId = profileSelect.value;
+        if (!profileId) { alert('Bitte wählen Sie ein Slicer-Profil aus.'); return; }
+
+        previewContainer.innerHTML = '<div class="text-center"><div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status"></div><p class="mt-2">Slicing & Nesting läuft...</p></div>';
+        this.disabled = true;
+        createBatchBtn.disabled = true;
+
+        fetch('/api/batch-planner/nest', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}' },
+            body: JSON.stringify({
+                job_ids: selectedJobIds,
+                printer_id: printerSelect.value,
+                profile_id: profileId
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                previewContainer.innerHTML = `<img src="${data.preview_url}?t=${new Date().getTime()}" class="img-fluid rounded" alt="Vorschau des Druckbetts">`;
+                const hours = Math.floor(data.estimated_time_min / 60);
+                const minutes = data.estimated_time_min % 60;
+                estimatedTimeEl.textContent = `${hours}h ${minutes}min`;
+                currentGcodeFilename = data.new_gcode_filename;
+                createBatchBtn.disabled = false;
+            } else {
+                previewContainer.innerHTML = `<div class="alert alert-danger">${data.message}</div>`;
+                estimatedTimeEl.textContent = '--:--';
+            }
+        })
+        .catch(error => {
+            previewContainer.innerHTML = '<div class="alert alert-danger">Ein unerwarteter Client-Fehler ist aufgetreten.</div>';
+            console.error('Nesting Error:', error);
+        })
+        .finally(() => { this.disabled = false; });
+    });
+
+    createBatchBtn.addEventListener('click', function() {
+        this.disabled = true;
+        this.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Erstelle...';
+        fetch('/api/batch-planner/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}' },
+            body: JSON.stringify({
+                job_ids: selectedJobIds,
+                gcode_filename: currentGcodeFilename,
+                printer_id: printerSelect.value,
+                filament_type_id: materialSelect.value
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                window.location.href = data.redirect_url;
+            } else {
+                alert(`Fehler: ${data.message}`);
+                this.disabled = false;
+                this.innerHTML = '<i class="bi bi-plus-circle-fill"></i> Batch-Auftrag erstellen';
+            }
+        });
+    });
+
+    printerSelect.addEventListener('change', () => { fetchJobs(); updateProfiles(); });
+    materialSelect.addEventListener('change', () => { fetchJobs(); updateProfiles(); });
+});
+</script>
+{% endblock %}

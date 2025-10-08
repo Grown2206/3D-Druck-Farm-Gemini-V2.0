@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+
+{% block title %}Wartungsplan{% endblock %}
+
+{% block content %}
+<div class="main-header">
+    <h1><i class="bi bi-calendar-check"></i> Wartungsplan</h1>
+    <div class="header-actions">
+        <a href="{{ url_for('maintenance_bp.index') }}" class="btn btn-secondary">
+            <i class="bi bi-gear"></i> Aufgaben verwalten
+        </a>
+        <a href="{{ url_for('maintenance_bp.history') }}" class="btn btn-secondary">
+            <i class="bi bi-clock-history"></i> Verlauf
+        </a>
+    </div>
+</div>
+
+<div class="alert alert-info">
+    <i class="bi bi-info-circle-fill me-2"></i>
+    Dieser Plan zeigt alle anstehenden Wartungsaufgaben basierend auf Druckerstunden und konfigurierten Intervallen.
+</div>
+
+<!-- Statistik-Übersicht -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card text-white bg-danger">
+            <div class="card-body text-center">
+                <h5 class="card-title">Überfällig</h5>
+                <h2 class="display-4">
+                    {{ maintenance_schedule | selectattr('urgency', 'equalto', 'overdue') | list | length }}
+                </h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-warning">
+            <div class="card-body text-center">
+                <h5 class="card-title text-dark">Dringend</h5>
+                <h2 class="display-4 text-dark">
+                    {{ maintenance_schedule | selectattr('urgency', 'equalto', 'urgent') | list | length }}
+                </h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-info">
+            <div class="card-body text-center">
+                <h5 class="card-title text-dark">Bald fällig</h5>
+                <h2 class="display-4 text-dark">
+                    {{ maintenance_schedule | selectattr('urgency', 'equalto', 'soon') | list | length }}
+                </h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-success">
+            <div class="card-body text-center">
+                <h5 class="card-title">Alles OK</h5>
+                <h2 class="display-4">
+                    {{ maintenance_schedule | selectattr('urgency', 'equalto', 'ok') | list | length }}
+                </h2>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Wartungsaufgaben nach Drucker gruppiert -->
+{% if maintenance_schedule %}
+    {% for printer_name, tasks in maintenance_schedule | groupby('printer.name') %}
+    <div class="card mb-4">
+        <div class="card-header">
+            <div class="d-flex justify-content-between align-items-center">
+                <h4 class="mb-0">
+                    <img src="{{ url_for('static', filename='3d-printer-icon.png') }}" 
+                         alt="Drucker" style="width: 24px; height: 24px; margin-right: 8px;">
+                    <a href="{{ url_for('printers_bp.printer_details', printer_id=tasks[0].printer.id) }}">
+                        {{ printer_name }}
+                    </a>
+                </h4>
+                <span class="badge bg-secondary">
+                    {{ "%.1f"|format(tasks[0].printer.total_print_hours or 0) }} h gesamt
+                </span>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th style="width: 10%;">Status</th>
+                            <th>Aufgabe</th>
+                            <th style="width: 12%;">Kategorie</th>
+                            <th style="width: 10%;">Intervall</th>
+                            <th style="width: 15%;">Verbleibend</th>
+                            <th style="width: 15%;">Aktionen</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in tasks %}
+                        <tr class="{% if item.urgency == 'overdue' %}table-danger{% elif item.urgency == 'urgent' %}table-warning{% endif %}">
+                            <td>
+                                {% if item.urgency == 'overdue' %}
+                                    <span class="badge bg-danger">{{ item.urgency_text }}</span>
+                                {% elif item.urgency == 'urgent' %}
+                                    <span class="badge bg-warning text-dark">{{ item.urgency_text }}</span>
+                                {% elif item.urgency == 'soon' %}
+                                    <span class="badge bg-info text-dark">{{ item.urgency_text }}</span>
+                                {% else %}
+                                    <span class="badge bg-success">{{ item.urgency_text }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <strong>{{ item.task.title }}</strong>
+                                {% if item.task.description %}
+                                <br><small class="text-muted">{{ item.task.description[:80] }}...</small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge bg-secondary">{{ item.task.category.value }}</span>
+                            </td>
+                            <td>{{ item.task.interval_hours }} h</td>
+                            <td>
+                                {% if item.hours_remaining < 0 %}
+                                    <span class="text-danger fw-bold">
+                                        {{ "%.1f"|format(abs(item.hours_remaining)) }} h überfällig
+                                    </span>
+                                {% else %}
+                                    {{ "%.1f"|format(item.hours_remaining) }} h
+                                {% endif %}
+                            </td>
+                            <td>
+                                <a href="{{ url_for('printers_bp.printer_details', printer_id=item.printer.id) }}#maintenance" 
+                                   class="btn btn-sm btn-primary" title="Wartung durchführen">
+                                    <i class="bi bi-tools"></i> Durchführen
+                                </a>
+                                {% if item.task.instruction_url %}
+                                <a href="{{ item.task.instruction_url }}" target="_blank" 
+                                   class="btn btn-sm btn-outline-info" title="Anleitung öffnen">
+                                    <i class="bi bi-book"></i>
+                                </a>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+{% else %}
+    <div class="alert alert-success">
+        <i class="bi bi-check-circle-fill me-2"></i>
+        <strong>Keine anstehenden Wartungen!</strong> Alle Drucker sind auf dem neuesten Stand.
+    </div>
+{% endif %}
+{% endblock %}

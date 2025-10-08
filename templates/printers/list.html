@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+
+{% block title %}Drucker verwalten{% endblock %}
+
+{% block content %}
+<div class="main-header">
+    <h1><i class="bi bi-printer-fill"></i> Drucker verwalten</h1>
+    <div class="header-actions">
+        <a href="{{ url_for('printers_bp.add_printer') }}" class="btn btn-primary"><i class="bi bi-plus-circle-fill"></i> Neuen Drucker hinzufügen</a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-content table-responsive">
+        <table class="table table-hover align-middle">
+            <thead>
+                <tr>
+                    <th style="width: 5%;">Bild</th>
+                    <th>Name</th>
+                    <th>Modell</th>
+                    <th>Status</th>
+                    <th>Features</th>
+                    <th>Bauvolumen (mm)</th>
+                    <th style="width: 15%;">Aktionen</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for printer in printers %}
+                <tr>
+                    <td>
+                        <img src="{{ url_for('static', filename=printer.image_url) if printer.image_url else url_for('static', filename='Logo.jpg') }}" 
+                             alt="Druckerbild" class="img-fluid rounded" style="max-height: 40px; max-width: 40px; object-fit: cover;"
+                             onerror="this.onerror=null;this.src='{{ url_for('static', filename='Logo.jpg') }}';">
+                    </td>
+                    <td><a href="{{ url_for('printers_bp.printer_details', printer_id=printer.id) }}"><strong>{{ printer.name }}</strong></a></td>
+                    <td>{{ printer.model or '-' }}</td>
+                    <td>
+                        <span class="badge status-{{ printer.status.name|lower }}">{{ printer.status.value }}</span>
+                    </td>
+                    <td class="feature-icons">
+                        {% if printer.has_enclosure %}
+                            <img src="{{ url_for('static', filename='Gehäuse_2.png') }}" width="24" title="Gehäuse">
+                        {% endif %}
+                        {% if printer.has_filter %}
+                            <img src="{{ url_for('static', filename='Filter.png') }}" width="24" title="Filter">
+                        {% endif %}
+                        {% if printer.has_camera %}
+                            <img src="{{ url_for('static', filename='webcam.png') }}" width="24" title="Kamera">
+                        {% endif %}
+                        {% if printer.has_led %}
+                            <img src="{{ url_for('static', filename='lampe.png') }}" width="24" title="LED-Licht">
+                        {% endif %}
+                        
+                        {% if printer.has_ace %}
+                             <img src="{{ url_for('static', filename='ace.png') }}" width="24" title="Multimaterial (ACE)">
+                        {% endif %}
+                        {% if printer.extruder_count %}
+                            {% for i in range(printer.extruder_count) %}
+                                <img src="{{ url_for('static', filename='Extruder.png') }}" width="24" title="{{ printer.extruder_count }} Extruder">
+                            {% endfor %}
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if printer.build_volume_l and printer.build_volume_w and printer.build_volume_h %}
+                            {{ printer.build_volume_l|int }}x{{ printer.build_volume_w|int }}x{{ printer.build_volume_h|int }}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a href="{{ url_for('printers_bp.printer_details', printer_id=printer.id) }}" class="btn btn-sm btn-outline-info" title="Details"><i class="bi bi-info-circle-fill"></i></a>
+                        <a href="{{ url_for('printers_bp.edit_printer', printer_id=printer.id) }}" class="btn btn-sm btn-outline-primary" title="Bearbeiten"><i class="bi bi-pencil-fill"></i></a>
+                        
+                        <form action="{{ url_for('printers_bp.copy_printer', printer_id=printer.id) }}" method="POST" class="d-inline">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                            <button type="submit" class="btn btn-sm btn-outline-secondary" title="Kopieren"><i class="bi bi-copy"></i></button>
+                        </form>
+
+                        <button type="button" class="btn btn-sm btn-outline-danger" title="Löschen"
+                                data-bs-toggle="modal"
+                                data-bs-target="#confirmDeleteModal"
+                                data-item-type="Drucker"
+                                data-item-name="{{ printer.name }}"
+                                data-form-action="{{ url_for('printers_bp.delete_printer', printer_id=printer.id) }}">
+                            <i class="bi bi-trash-fill"></i>
+                        </button>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="7" class="text-center text-muted">Keine Drucker vorhanden. Fügen Sie Ihren ersten Drucker hinzu!</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

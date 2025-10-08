@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+
+{% block title %}Wartungsaufgaben verwalten{% endblock %}
+
+{% block content %}
+<div class="main-header">
+    <h1><i class="bi bi-card-checklist"></i> Wartungsaufgaben verwalten</h1>
+    <div class="header-actions">
+        <a href="{{ url_for('maintenance_bp.schedule') }}" class="btn btn-warning">
+            <i class="bi bi-calendar-check"></i> Wartungsplan
+        </a>
+        <a href="{{ url_for('maintenance_bp.history') }}" class="btn btn-secondary">
+            <i class="bi bi-clock-history"></i> Verlauf
+        </a>
+    </div>
+</div>
+
+<div class="alert alert-info">
+    <i class="bi bi-info-circle-fill me-2"></i>
+    <strong>Hinweis:</strong> Hier können Sie Wartungsaufgaben-Templates definieren, die dann in den Drucker-Checklisten verwendet werden.
+</div>
+
+<div class="row">
+    <div class="col-lg-5 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h4>{{ 'Aufgabe bearbeiten' if task_to_edit else 'Neue Aufgabe definieren' }}</h4>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('maintenance_bp.edit_task', task_id=task_to_edit.id) if task_to_edit else url_for('maintenance_bp.index') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    
+                    <div class="mb-3">
+                        <label for="title" class="form-label">Titel*</label>
+                        <input type="text" id="title" name="title" class="form-control" 
+                               value="{{ task_to_edit.title if task_to_edit else '' }}" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Beschreibung</label>
+                        <textarea id="description" name="description" class="form-control" rows="3">{{ task_to_edit.description if task_to_edit else '' }}</textarea>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="category" class="form-label">Kategorie</label>
+                            <select id="category" name="category" class="form-select">
+                                {% for cat in MaintenanceTaskCategory %}
+                                <option value="{{ cat.name }}" 
+                                        {% if task_to_edit and task_to_edit.category == cat %}selected{% endif %}>
+                                    {{ cat.value }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="interval_hours" class="form-label">Intervall (Druckstunden)</label>
+                            <input type="number" id="interval_hours" name="interval_hours" class="form-control" 
+                                   value="{{ task_to_edit.interval_hours if task_to_edit else '' }}"
+                                   placeholder="z.B. 200">
+                            <div class="form-text">Leer lassen für manuelle Wartung</div>
+                        </div>
+                    </div>
+
+                    <hr class="my-4">
+                    <h6>Zusätzliche Informationen</h6>
+
+                    <div class="mb-3">
+                        <label for="instruction_url" class="form-label">Anleitungs-URL</label>
+                        <input type="url" id="instruction_url" name="instruction_url" class="form-control" 
+                               value="{{ task_to_edit.instruction_url if task_to_edit else '' }}" 
+                               placeholder="https://...">
+                        <div class="form-text">Link zu Video-Anleitung oder PDF</div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-8 mb-3">
+                            <label for="required_consumable_id" class="form-label">Benötigtes Ersatzteil</label>
+                            <select id="required_consumable_id" name="required_consumable_id" class="form-select">
+                                <option value="">Keines</option>
+                                {% for item in consumables %}
+                                <option value="{{ item.id }}" 
+                                        {% if task_to_edit and task_to_edit.required_consumable_id == item.id %}selected{% endif %}>
+                                    {{ item.name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="required_consumable_quantity" class="form-label">Menge</label>
+                            <input type="number" id="required_consumable_quantity" name="required_consumable_quantity" 
+                                   class="form-control" value="{{ task_to_edit.required_consumable_quantity if task_to_edit else 1 }}">
+                        </div>
+                    </div>
+
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="is_active" name="is_active" 
+                               {% if task_to_edit is none or task_to_edit.is_active %}checked{% endif %}>
+                        <label class="form-check-label" for="is_active">
+                            Diese Aufgabe ist aktiv
+                        </label>
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-lg"></i> Speichern
+                        </button>
+                        {% if task_to_edit %}
+                        <a href="{{ url_for('maintenance_bp.index') }}" class="btn btn-secondary">Abbrechen</a>
+                        {% endif %}
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-7">
+        <div class="card">
+            <div class="card-header">
+                <h4>Definierte Wartungsaufgaben</h4>
+            </div>
+            <div class="card-body">
+                {% if tasks %}
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead>
+                            <tr>
+                                <th>Titel</th>
+                                <th>Kategorie</th>
+                                <th>Intervall</th>
+                                <th>Status</th>
+                                <th>Aktionen</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for task in tasks %}
+                            <tr>
+                                <td>
+                                    <strong>{{ task.title }}</strong>
+                                    {% if task.description %}
+                                    <br><small class="text-muted">{{ task.description[:50] }}...</small>
+                                    {% endif %}
+                                </td>
+                                <td><span class="badge bg-secondary">{{ task.category.value }}</span></td>
+                                <td>
+                                    {% if task.interval_hours %}
+                                        {{ task.interval_hours }} h
+                                    {% else %}
+                                        <span class="text-muted">Manuell</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if task.is_active %}
+                                        <i class="bi bi-check-circle-fill text-success" title="Aktiv"></i>
+                                    {% else %}
+                                        <i class="bi bi-x-circle-fill text-secondary" title="Inaktiv"></i>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <a href="{{ url_for('maintenance_bp.edit_task', task_id=task.id) }}" 
+                                       class="btn btn-sm btn-outline-primary" title="Bearbeiten">
+                                        <i class="bi bi-pencil-fill"></i>
+                                    </a>
+                                    <button type="button" class="btn btn-sm btn-outline-danger" 
+                                            data-bs-toggle="modal" data-bs-target="#confirmDeleteModal"
+                                            data-item-type="Wartungsaufgabe" 
+                                            data-item-name="{{ task.title }}"
+                                            data-form-action="{{ url_for('maintenance_bp.delete_task', task_id=task.id) }}"
+                                            title="Löschen">
+                                        <i class="bi bi-trash-fill"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="alert alert-info mb-0">
+                    <i class="bi bi-info-circle-fill me-2"></i>
+                    Noch keine Wartungsaufgaben definiert. Erstellen Sie Ihre erste Aufgabe!
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
