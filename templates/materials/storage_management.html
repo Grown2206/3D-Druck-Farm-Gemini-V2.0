@@ -1,0 +1,1041 @@
+{% extends "base.html" %}
+
+{% block title %}Lagerort-Verwaltung{% endblock %}
+
+{% block head_extra %}
+<style>
+    .storage-location {
+        min-height: 200px;
+        border: 2px dashed #6c757d;
+        border-radius: 8px;
+        transition: all 0.3s ease;
+    }
+    .storage-location.drag-over {
+        border-color: #0d6efd;
+        background-color: rgba(13, 110, 253, 0.1);
+    }
+    .storage-location.has-spools {
+        border-style: solid;
+        border-color: #198754;
+        background: linear-gradient(135deg, rgba(25,135,84,0.02) 0%, rgba(25,135,84,0.05) 100%);
+    }
+    .spool-item {
+        cursor: grab;
+        transition: all 0.2s ease;
+        user-select: none;
+    }
+    .spool-item:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    }
+    .spool-item.dragging {
+        opacity: 0.6;
+        transform: rotate(5deg);
+        cursor: grabbing;
+    }
+    .spool-item.selected {
+        border: 2px solid #0d6efd !important;
+        background-color: rgba(13, 110, 253, 0.1);
+    }
+    .location-header {
+        background: linear-gradient(135deg, #495057 0%, #6c757d 100%);
+        color: white;
+        padding: 0.75rem;
+        border-radius: 6px 6px 0 0;
+        font-weight: bold;
+        text-align: center;
+    }
+    .location-body {
+        padding: 1rem;
+        min-height: 150px;
+    }
+    .unassigned-area {
+        background: linear-gradient(135deg, rgba(220,53,69,0.05) 0%, rgba(220,53,69,0.1) 100%);
+        border: 2px dashed #dc3545;
+    }
+    .location-stats {
+        font-size: 0.8rem;
+        color: #6c757d;
+        margin-top: 0.25rem;
+    }
+    .quick-actions {
+        position: sticky;
+        top: 20px;
+        z-index: 1000;
+    }
+    .loading-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+    }
+    .filter-section {
+        background: rgba(var(--bs-dark-rgb), 0.05);
+        border-radius: 8px;
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+    }
+    .search-result-item {
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+    .search-result-item:hover {
+        background-color: rgba(13, 110, 253, 0.1);
+        transform: translateX(5px);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="main-header">
+    <h1><i class="bi bi-geo-alt"></i> Lagerort-Verwaltung</h1>
+    <div class="header-actions">
+        <!-- Quick Actions in Header -->
+        <div class="btn-group me-3" role="group">
+            <button class="btn btn-outline-primary" onclick="autoOrganize()" title="Auto-Organisieren">
+                <i class="bi bi-magic"></i>
+            </button>
+            <button class="btn btn-outline-info" onclick="showSearch()" title="Spule suchen">
+                <i class="bi bi-search"></i>
+            </button>
+            <button class="btn btn-outline-warning" onclick="bulkMoveSelected()" disabled id="bulkMoveBtn" title="Ausgewählte verschieben">
+                <i class="bi bi-arrows-move"></i> <span id="bulkMoveCount">0</span>
+            </button>
+        </div>
+        
+        <!-- Main Actions -->
+        <button class="btn btn-outline-success" onclick="exportLayout()">
+            <i class="bi bi-download"></i> Layout exportieren
+        </button>
+        <button class="btn btn-outline-secondary" onclick="resetLayout()">
+            <i class="bi bi-arrow-counterclockwise"></i> Reset
+        </button>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addLocationModal">
+            <i class="bi bi-plus-lg"></i> Lagerort hinzufügen
+        </button>
+    </div>
+</div>
+
+<!-- Selection Status Bar -->
+<div class="alert alert-info d-none" id="selectionBar">
+    <div class="d-flex justify-content-between align-items-center">
+        <span>
+            <i class="bi bi-check2-square"></i> 
+            <span id="selectedCount">0</span> Spulen ausgewählt
+        </span>
+        <div>
+            <button class="btn btn-sm btn-outline-primary" onclick="selectAll()">
+                <i class="bi bi-check-all"></i> Alle auswählen
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" onclick="clearSelection()">
+                <i class="bi bi-x-square"></i> Auswahl aufheben
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Filter & Statistiken -->
+<div class="filter-section">
+    <form method="GET" id="filterForm" class="row g-3 align-items-end">
+        <div class="col-md-3">
+            <label class="form-label">Lagerort filtern</label>
+            <select name="location" class="form-select" onchange="submitForm()">
+                <option value="">Alle Lagerorte</option>
+                {% for location in available_locations %}
+                <option value="{{ location }}" {% if current_filters.location == location %}selected{% endif %}>
+                    {{ location }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label">Material filtern</label>
+            <select name="material" class="form-select" onchange="submitForm()">
+                <option value="">Alle Materialien</option>
+                {% for material in available_materials %}
+                <option value="{{ material }}" {% if current_filters.material == material %}selected{% endif %}>
+                    {{ material }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label">Sortierung</label>
+            <select name="sort" class="form-select" onchange="submitForm()">
+                <option value="location" {% if current_filters.sort == 'location' %}selected{% endif %}>Nach Lagerort</option>
+                <option value="material" {% if current_filters.sort == 'material' %}selected{% endif %}>Nach Material</option>
+                <option value="weight" {% if current_filters.sort == 'weight' %}selected{% endif %}>Nach Gewicht</option>
+                <option value="date" {% if current_filters.sort == 'date' %}selected{% endif %}>Nach Kaufdatum</option>
+            </select>
+        </div>
+        <div class="col-md-3">
+            <button type="button" class="btn btn-outline-secondary w-100" onclick="resetFilters()">
+                <i class="bi bi-x-circle"></i> Filter zurücksetzen
+            </button>
+        </div>
+    </form>
+</div>
+
+<!-- Quick-Statistiken -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card text-white bg-info">
+            <div class="card-body text-center">
+                <h4>{{ total_locations }}</h4>
+                <small>Lagerorte</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-success">
+            <div class="card-body text-center">
+                <h4>{{ total_spools }}</h4>
+                <small>Spulen gesamt</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-warning">
+            <div class="card-body text-center">
+                <h4 class="text-dark">{{ unassigned_spools|length }}</h4>
+                <small class="text-dark">Unzugewiesen</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-primary">
+            <div class="card-body text-center">
+                <h4>{{ "%.1f"|format(total_weight) }}kg</h4>
+                <small>Gesamtgewicht</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Unzugewiesene Spulen -->
+{% if unassigned_spools %}
+<div class="card mb-4">
+    <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
+        <h6 class="mb-0">
+            <i class="bi bi-exclamation-triangle"></i> 
+            Unzugewiesene Spulen ({{ unassigned_spools|length }})
+        </h6>
+        <div>
+            <button class="btn btn-sm btn-outline-dark" onclick="selectAllInArea('unassigned')">
+                <i class="bi bi-check-all"></i> Alle auswählen
+            </button>
+            <button class="btn btn-sm btn-dark" onclick="autoAssignUnassigned()">
+                <i class="bi bi-magic"></i> Auto-Zuweisen
+            </button>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="storage-location unassigned-area" data-location="unassigned">
+            <div class="location-body">
+                <div class="row g-2">
+                    {% for spool in unassigned_spools %}
+                    <div class="col-md-2">
+                        {% include 'materials/_spool_card_draggable.html' %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Lagerorte Grid -->
+<div class="row g-4">
+    {% for location_code, spools in locations.items() %}
+    <div class="col-lg-3 col-md-4 col-sm-6">
+        <div class="card">
+            <div class="location-header d-flex justify-content-between align-items-center">
+                <div>
+                    {{ location_code }}
+                    <div class="location-stats">
+                        {{ spools|length }} Spulen | {{ "%.0f"|format(spools|sum(attribute='current_weight_g')) }}g
+                    </div>
+                </div>
+                <div class="dropdown">
+                    <button class="btn btn-sm btn-outline-light dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                        <i class="bi bi-three-dots"></i>
+                    </button>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="#" onclick="selectAllInLocation('{{ location_code }}')">
+                            <i class="bi bi-check-all"></i> Alle auswählen
+                        </a></li>
+                        <li><a class="dropdown-item" href="#" onclick="moveAllFromLocation('{{ location_code }}')">
+                            <i class="bi bi-arrow-right"></i> Alle verschieben
+                        </a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item text-danger" href="#" onclick="clearLocation('{{ location_code }}')">
+                            <i class="bi bi-trash"></i> Lagerort leeren
+                        </a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="storage-location {% if spools %}has-spools{% endif %}" 
+                 data-location="{{ location_code }}">
+                <div class="location-body">
+                    {% if spools %}
+                    <div class="row g-2">
+                        {% for spool in spools %}
+                        <div class="col-12">
+                            {% include 'materials/_spool_card_draggable.html' %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-center text-muted py-3">
+                        <i class="bi bi-inbox fs-1"></i>
+                        <p class="mb-0">Leer</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+
+
+<!-- Loading Overlay -->
+<div id="loadingOverlay" class="loading-overlay d-none">
+    <div class="text-center text-white">
+        <div class="spinner-border" role="status">
+            <span class="visually-hidden">Lädt...</span>
+        </div>
+        <p class="mt-2" id="loadingMessage">Wird verarbeitet...</p>
+    </div>
+</div>
+
+<!-- Modals -->
+
+<!-- Lagerort hinzufügen Modal -->
+<div class="modal fade" id="addLocationModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Neuen Lagerort hinzufügen</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addLocationForm">
+                    <div class="mb-3">
+                        <label class="form-label">Lagerort-Code *</label>
+                        <input type="text" class="form-control" id="locationCode" placeholder="z.B. A1, SHELF-B2, CABINET-01" required>
+                        <div class="form-text">Verwenden Sie eindeutige, kurze Bezeichnungen</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Beschreibung</label>
+                        <input type="text" class="form-control" id="locationDescription" placeholder="Optional: Regal neben der Tür">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Kapazität (Spulen)</label>
+                        <input type="number" class="form-control" id="locationCapacity" placeholder="Optional: Maximale Anzahl Spulen">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                <button type="button" class="btn btn-primary" onclick="addLocation()">Hinzufügen</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Bulk Move Modal -->
+<div class="modal fade" id="bulkMoveModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Spulen verschieben</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Wohin sollen die <strong><span id="bulkMoveSpoolCount">0</span> ausgewählten Spulen</strong> verschoben werden?</p>
+                <div class="mb-3">
+                    <label class="form-label">Ziel-Lagerort</label>
+                    <select class="form-select" id="bulkMoveTarget">
+                        <option value="unassigned">Unzugewiesen</option>
+                        {% for location in available_locations %}
+                        <option value="{{ location }}">{{ location }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="createNewLocationCheck">
+                    <label class="form-check-label" for="createNewLocationCheck">
+                        Neuen Lagerort erstellen
+                    </label>
+                </div>
+                <div class="mb-3 d-none" id="newLocationInput">
+                    <label class="form-label">Neuer Lagerort-Name</label>
+                    <input type="text" class="form-control" id="newLocationName" placeholder="z.B. TEMP-01">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                <button type="button" class="btn btn-primary" onclick="executeBulkMove()">Verschieben</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Auto-Organize Modal -->
+<div class="modal fade" id="autoOrganizeModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Automatische Organisation</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Wählen Sie die Organisationsmethode:</p>
+                <div class="mb-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="organizeType" id="organizeByMaterial" value="material" checked>
+                        <label class="form-check-label" for="organizeByMaterial">
+                            <strong>Nach Material-Typ</strong><br>
+                            <small class="text-muted">Gruppiert nach PLA, PETG, ABS, etc. (z.B. MAT-PLA)</small>
+                        </label>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="organizeType" id="organizeByManufacturer" value="manufacturer">
+                        <label class="form-check-label" for="organizeByManufacturer">
+                            <strong>Nach Hersteller</strong><br>
+                            <small class="text-muted">Gruppiert nach Herstellern (z.B. MFG-PRI)</small>
+                        </label>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="organizeType" id="organizeByColor" value="color">
+                        <label class="form-check-label" for="organizeByColor">
+                            <strong>Nach Farben</strong><br>
+                            <small class="text-muted">Gruppiert nach Farbgruppen (z.B. COL-RED)</small>
+                        </label>
+                    </div>
+                </div>
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    <strong>Achtung:</strong> Dies verschiebt alle nicht verwendeten Spulen automatisch. Vorhandene Zuweisungen werden überschrieben!
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                <button type="button" class="btn btn-warning" onclick="executeAutoOrganize()">Organisieren</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Search Modal -->
+<div class="modal fade" id="searchModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Spule suchen</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3 mb-3">
+                    <div class="col-md-8">
+                        <input type="text" class="form-control" id="searchTerm" placeholder="Suchbegriff eingeben..." onkeyup="performSearch()">
+                    </div>
+                    <div class="col-md-4">
+                        <select class="form-select" id="searchType" onchange="performSearch()">
+                            <option value="any">Überall suchen</option>
+                            <option value="short_id">Spulen-ID</option>
+                            <option value="material">Material</option>
+                            <option value="location">Lagerort</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="searchResults">
+                    <div class="text-center text-muted p-4">
+                        <i class="bi bi-search fs-1"></i>
+                        <p>Geben Sie einen Suchbegriff ein</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Export Modal -->
+<div class="modal fade" id="exportModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Layout exportieren</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">Export-Format</label>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="exportFormat" id="exportCSV" value="csv" checked>
+                        <label class="form-check-label" for="exportCSV">
+                            CSV (Excel-kompatibel)
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="exportFormat" id="exportJSON" value="json">
+                        <label class="form-check-label" for="exportJSON">
+                            JSON (für Backup/Import)
+                        </label>
+                    </div>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="includeEmpty">
+                    <label class="form-check-label" for="includeEmpty">
+                        Leere Spulen einschließen
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                <button type="button" class="btn btn-success" onclick="executeExport()">
+                    <i class="bi bi-download"></i> Exportieren
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let draggedSpool = null;
+let selectedSpools = new Set();
+let quickActionsCollapsed = false;
+
+document.addEventListener('DOMContentLoaded', function() {
+    initializeDragAndDrop();
+    updateSelectionUI();
+    
+    // Event Listeners
+    document.getElementById('createNewLocationCheck').addEventListener('change', function() {
+        document.getElementById('newLocationInput').classList.toggle('d-none', !this.checked);
+    });
+});
+
+function initializeDragAndDrop() {
+    // Alle Spulen-Items draggable machen
+    document.querySelectorAll('.spool-item').forEach(item => {
+        item.draggable = true;
+        
+        item.addEventListener('click', function(e) {
+            e.stopPropagation();
+            toggleSpoolSelection(this.dataset.spoolId);
+        });
+        
+        item.addEventListener('dragstart', function(e) {
+            draggedSpool = this;
+            this.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/html', this.outerHTML);
+        });
+        
+        item.addEventListener('dragend', function(e) {
+            this.classList.remove('dragging');
+            draggedSpool = null;
+        });
+    });
+    
+    // Drop-Zonen einrichten
+    document.querySelectorAll('.storage-location').forEach(location => {
+        location.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            this.classList.add('drag-over');
+        });
+        
+        location.addEventListener('dragleave', function(e) {
+            this.classList.remove('drag-over');
+        });
+        
+        location.addEventListener('drop', function(e) {
+            e.preventDefault();
+            this.classList.remove('drag-over');
+            
+            if (draggedSpool) {
+                const spoolId = draggedSpool.dataset.spoolId;
+                const newLocation = this.dataset.location;
+                moveSpool(spoolId, newLocation);
+            }
+        });
+    });
+}
+
+function toggleSpoolSelection(spoolId) {
+    const spoolElement = document.querySelector(`[data-spool-id="${spoolId}"]`);
+    
+    if (selectedSpools.has(spoolId)) {
+        selectedSpools.delete(spoolId);
+        spoolElement.classList.remove('selected');
+    } else {
+        selectedSpools.add(spoolId);
+        spoolElement.classList.add('selected');
+    }
+    
+    updateSelectionUI();
+}
+
+function updateSelectionUI() {
+    const count = selectedSpools.size;
+    document.getElementById('selectedCount').textContent = `${count} ausgewählt`;
+    document.getElementById('bulkMoveCount').textContent = count;
+    document.getElementById('bulkMoveBtn').disabled = count === 0;
+}
+
+function selectAllInArea(area) {
+    const selector = area === 'unassigned' 
+        ? '.unassigned-area .spool-item' 
+        : `[data-location="${area}"] .spool-item`;
+    
+    document.querySelectorAll(selector).forEach(item => {
+        const spoolId = item.dataset.spoolId;
+        if (!selectedSpools.has(spoolId)) {
+            selectedSpools.add(spoolId);
+            item.classList.add('selected');
+        }
+    });
+    
+    updateSelectionUI();
+}
+
+function selectAllInLocation(location) {
+    selectAllInArea(location);
+}
+
+async function moveSpool(spoolId, newLocation) {
+    showLoading('Spule wird verschoben...');
+    
+    try {
+        const response = await fetch('/materials/storage-management/move-spool', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrf_token]').value
+            },
+            body: JSON.stringify({
+                spool_id: parseInt(spoolId),
+                new_location: newLocation
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.status === 'success') {
+            showToast(result.message, 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showToast(result.message, 'error');
+        }
+        
+    } catch (error) {
+        showToast('Fehler beim Verschieben der Spule', 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+function showBulkMove() {
+    if (selectedSpools.size === 0) {
+        showToast('Bitte wählen Sie zuerst Spulen aus', 'warning');
+        return;
+    }
+    
+    document.getElementById('bulkMoveSpoolCount').textContent = selectedSpools.size;
+    const modal = new bootstrap.Modal(document.getElementById('bulkMoveModal'));
+    modal.show();
+}
+
+function bulkMoveSelected() {
+    showBulkMove();
+}
+
+async function executeBulkMove() {
+    const createNew = document.getElementById('createNewLocationCheck').checked;
+    let targetLocation = createNew 
+        ? document.getElementById('newLocationName').value.trim()
+        : document.getElementById('bulkMoveTarget').value;
+    
+    if (!targetLocation && createNew) {
+        showToast('Bitte geben Sie einen Namen für den neuen Lagerort ein', 'warning');
+        return;
+    }
+    
+    showLoading(`${selectedSpools.size} Spulen werden verschoben...`);
+    
+    try {
+        const response = await fetch('/materials/storage-management/bulk-move', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrf_token]').value
+            },
+            body: JSON.stringify({
+                spool_ids: Array.from(selectedSpools).map(id => parseInt(id)),
+                new_location: targetLocation === 'unassigned' ? null : targetLocation
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.status === 'success') {
+            showToast(result.message, 'success');
+            bootstrap.Modal.getInstance(document.getElementById('bulkMoveModal')).hide();
+            selectedSpools.clear();
+            updateSelectionUI();
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showToast(result.message, 'error');
+        }
+        
+    } catch (error) {
+        showToast('Fehler beim Verschieben der Spulen', 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+function autoOrganize() {
+    const modal = new bootstrap.Modal(document.getElementById('autoOrganizeModal'));
+    modal.show();
+}
+
+async function executeAutoOrganize() {
+    const organizeType = document.querySelector('input[name="organizeType"]:checked').value;
+    
+    showLoading('Spulen werden automatisch organisiert...');
+    
+    try {
+        const response = await fetch('/materials/storage-management/auto-organize', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrf_token]').value
+            },
+            body: JSON.stringify({
+                type: organizeType
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.status === 'success') {
+            showToast(result.message, 'success');
+            bootstrap.Modal.getInstance(document.getElementById('autoOrganizeModal')).hide();
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showToast(result.message, 'error');
+        }
+        
+    } catch (error) {
+        showToast('Fehler bei der automatischen Organisation', 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+function showSearch() {
+    const modal = new bootstrap.Modal(document.getElementById('searchModal'));
+    modal.show();
+    document.getElementById('searchTerm').focus();
+}
+
+let searchTimeout;
+async function performSearch() {
+    clearTimeout(searchTimeout);
+    
+    const searchTerm = document.getElementById('searchTerm').value.trim();
+    const searchType = document.getElementById('searchType').value;
+    
+    if (searchTerm.length < 2) {
+        document.getElementById('searchResults').innerHTML = `
+            <div class="text-center text-muted p-4">
+                <i class="bi bi-search fs-1"></i>
+                <p>Mindestens 2 Zeichen eingeben</p>
+            </div>
+        `;
+        return;
+    }
+    
+    searchTimeout = setTimeout(async () => {
+        try {
+            const response = await fetch('/materials/storage-management/search-spool', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('[name=csrf_token]').value
+                },
+                body: JSON.stringify({
+                    search_term: searchTerm,
+                    search_type: searchType
+                })
+            });
+            
+            const result = await response.json();
+            
+            if (result.status === 'success') {
+                displaySearchResults(result.results);
+            } else {
+                showToast(result.message, 'error');
+            }
+            
+        } catch (error) {
+            showToast('Fehler bei der Suche', 'error');
+        }
+    }, 300);
+}
+
+function displaySearchResults(results) {
+    const container = document.getElementById('searchResults');
+    
+    if (results.length === 0) {
+        container.innerHTML = `
+            <div class="text-center text-muted p-4">
+                <i class="bi bi-search fs-1"></i>
+                <p>Keine Spulen gefunden</p>
+            </div>
+        `;
+        return;
+    }
+    
+    const resultsHtml = results.map(spool => `
+        <div class="search-result-item border rounded p-3 mb-2" onclick="highlightSpool('${spool.short_id}')">
+            <div class="d-flex align-items-center">
+                <div class="me-3" style="width: 20px; height: 20px; background-color: ${spool.color}; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.3);"></div>
+                <div class="flex-grow-1">
+                    <h6 class="mb-1">${spool.short_id}</h6>
+                    <p class="mb-1 text-muted">${spool.material} (${spool.material_type})</p>
+                    <small class="text-muted">
+                        <i class="bi bi-geo-alt"></i> ${spool.location} | 
+                        <i class="bi bi-weight"></i> ${spool.weight_g}g
+                        ${spool.is_in_use ? ' | <span class="badge bg-warning text-dark">In Benutzung</span>' : ''}
+                    </small>
+                </div>
+                <div>
+                    <i class="bi bi-arrow-right"></i>
+                </div>
+            </div>
+        </div>
+    `).join('');
+    
+    container.innerHTML = `
+        <p class="text-muted mb-3">${results.length} Spule(n) gefunden:</p>
+        ${resultsHtml}
+    `;
+}
+
+function highlightSpool(shortId) {
+    bootstrap.Modal.getInstance(document.getElementById('searchModal')).hide();
+    
+    const spoolElement = document.querySelector(`[data-spool-id="${shortId}"]`) || 
+                        document.querySelector(`.spool-item:contains("${shortId}")`);
+    
+    if (spoolElement) {
+        spoolElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        spoolElement.style.animation = 'pulse 2s ease-in-out 3';
+        
+        // Temporäre Hervorhebung
+        spoolElement.style.border = '3px solid #0d6efd';
+        setTimeout(() => {
+            spoolElement.style.border = '';
+        }, 3000);
+    } else {
+        showToast('Spule wurde gefunden, aber ist im aktuellen Filter nicht sichtbar', 'info');
+    }
+}
+
+function exportLayout() {
+    const modal = new bootstrap.Modal(document.getElementById('exportModal'));
+    modal.show();
+}
+
+async function executeExport() {
+    const format = document.querySelector('input[name="exportFormat"]:checked').value;
+    const includeEmpty = document.getElementById('includeEmpty').checked;
+    
+    showLoading('Export wird erstellt...');
+    
+    try {
+        const url = `/materials/storage-management/export?format=${format}&include_empty=${includeEmpty}`;
+        window.open(url, '_blank');
+        
+        bootstrap.Modal.getInstance(document.getElementById('exportModal')).hide();
+        showToast('Export erfolgreich erstellt', 'success');
+        
+    } catch (error) {
+        showToast('Fehler beim Export', 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+async function resetLayout() {
+    if (!confirm('Layout wirklich zurücksetzen?\n\nAlle Spulen werden als unzugewiesen markiert. Diese Aktion kann nicht rückgängig gemacht werden!')) {
+        return;
+    }
+    
+    showLoading('Layout wird zurückgesetzt...');
+    
+    try {
+        const response = await fetch('/materials/storage-management/reset-layout', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrf_token]').value
+            },
+            body: JSON.stringify({
+                confirm: true
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.status === 'success') {
+            showToast(result.message, 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showToast(result.message, 'error');
+        }
+        
+    } catch (error) {
+        showToast('Fehler beim Zurücksetzen des Layouts', 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+async function addLocation() {
+    const name = document.getElementById('locationCode').value.trim();
+    const description = document.getElementById('locationDescription').value.trim();
+    const capacity = document.getElementById('locationCapacity').value;
+    
+    if (!name) {
+        showToast('Lagerort-Code ist erforderlich', 'warning');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/materials/storage-management/create-location', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrf_token]').value
+            },
+            body: JSON.stringify({
+                name: name,
+                description: description,
+                capacity: capacity ? parseInt(capacity) : null
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.status === 'success') {
+            showToast(result.message, 'success');
+            bootstrap.Modal.getInstance(document.getElementById('addLocationModal')).hide();
+            document.getElementById('addLocationForm').reset();
+            
+            // Optional: Location zum DOM hinzufügen ohne Reload
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showToast(result.message, 'error');
+        }
+        
+    } catch (error) {
+        showToast('Fehler beim Erstellen des Lagerorts', 'error');
+    }
+}
+
+function autoAssignUnassigned() {
+    if (confirm('Alle unzugewiesenen Spulen automatisch nach Material-Typ organisieren?')) {
+        executeAutoOrganize();
+    }
+}
+
+function moveAllFromLocation(location) {
+    // Alle Spulen in diesem Lagerort auswählen
+    selectedSpools.clear();
+    selectAllInLocation(location);
+    showBulkMove();
+}
+
+function clearLocation(location) {
+    if (confirm(`Lagerort "${location}" wirklich leeren?\nAlle Spulen werden als unzugewiesen markiert.`)) {
+        selectedSpools.clear();
+        selectAllInLocation(location);
+        
+        // Bulk-Move zu unzugewiesen
+        document.getElementById('bulkMoveTarget').value = 'unassigned';
+        executeBulkMove();
+    }
+}
+
+function toggleQuickActions() {
+    const body = document.getElementById('quickActionsBody');
+    const icon = document.getElementById('quickActionsToggle');
+    
+    quickActionsCollapsed = !quickActionsCollapsed;
+    
+    if (quickActionsCollapsed) {
+        body.style.display = 'none';
+        icon.className = 'bi bi-chevron-up';
+    } else {
+        body.style.display = 'block';
+        icon.className = 'bi bi-chevron-down';
+    }
+}
+
+function submitForm() {
+    document.getElementById('filterForm').submit();
+}
+
+function resetFilters() {
+    window.location.href = window.location.pathname;
+}
+
+function showLoading(message) {
+    document.getElementById('loadingMessage').textContent = message;
+    document.getElementById('loadingOverlay').classList.remove('d-none');
+}
+
+function hideLoading() {
+    document.getElementById('loadingOverlay').classList.add('d-none');
+}
+
+function showToast(message, type) {
+    const toastHtml = `
+        <div class="toast align-items-center text-white bg-${type === 'success' ? 'success' : type === 'warning' ? 'warning' : 'danger'} border-0" 
+             role="alert" style="position: fixed; top: 20px; right: 20px; z-index: 9999;">
+            <div class="d-flex">
+                <div class="toast-body">${message}</div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+            </div>
+        </div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', toastHtml);
+    const toast = document.querySelector('.toast:last-child');
+    const bsToast = new bootstrap.Toast(toast);
+    bsToast.show();
+    
+    setTimeout(() => toast.remove(), 5000);
+}
+</script>
+{% endblock %}

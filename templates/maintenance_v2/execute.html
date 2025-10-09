@@ -1,0 +1,434 @@
+{% extends "base.html" %}
+
+{% block title %}Wartung durchführen{% endblock %}
+
+{% block head_extra %}
+<style>
+    .checklist-item {
+        padding: 1rem;
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 0.5rem;
+        margin-bottom: 0.75rem;
+        transition: all 0.2s;
+    }
+    .checklist-item:hover {
+        background-color: rgba(255,255,255,0.05);
+    }
+    .checklist-item.completed {
+        background-color: rgba(32, 201, 151, 0.1);
+        border-color: rgba(32, 201, 151, 0.3);
+    }
+    .photo-preview {
+        position: relative;
+        display: inline-block;
+        margin: 0.5rem;
+    }
+    .photo-preview img {
+        width: 150px;
+        height: 150px;
+        object-fit: cover;
+        border-radius: 0.5rem;
+    }
+    .photo-preview .remove-btn {
+        position: absolute;
+        top: -8px;
+        right: -8px;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: #dc3545;
+        color: white;
+        border: none;
+        cursor: pointer;
+    }
+    .timer {
+        font-size: 2rem;
+        font-weight: bold;
+        color: #0dcaf0;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="main-header">
+    <h1><i class="bi bi-tools"></i> Wartung durchführen</h1>
+    <div class="header-actions">
+        <a href="{{ url_for('maintenance_new_bp.printer_schedule', printer_id=schedule.printer.id) }}" class="btn btn-secondary">
+            <i class="bi bi-x-lg"></i> Abbrechen
+        </a>
+    </div>
+</div>
+
+<!-- Info-Header -->
+<div class="row g-4 mb-4">
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body">
+                <h6 class="text-muted">Drucker</h6>
+                <h5>{{ schedule.printer.name }}</h5>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body">
+                <h6 class="text-muted">Aufgabe</h6>
+                <h5>{{ schedule.task.title }}</h5>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body">
+                <h6 class="text-muted">Geschätzte Dauer</h6>
+                <h5>
+                    {% if schedule.task.estimated_duration_min %}
+                        ~{{ schedule.task.estimated_duration_min }} min
+                    {% else %}
+                        Nicht angegeben
+                    {% endif %}
+                </h5>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-primary text-white">
+            <div class="card-body">
+                <h6>Verstrichene Zeit</h6>
+                <div class="timer" id="timer">00:00:00</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Haupt-Formular -->
+<div class="row g-4">
+    <div class="col-lg-8">
+        <!-- Beschreibung & Sicherheit -->
+        {% if schedule.task.description or schedule.task.safety_warnings %}
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-info-circle"></i> Informationen</h5>
+            </div>
+            <div class="card-body">
+                {% if schedule.task.description %}
+                <p>{{ schedule.task.description }}</p>
+                {% endif %}
+
+                {% if schedule.task.safety_warnings %}
+                <div class="alert alert-warning">
+                    <h6><i class="bi bi-exclamation-triangle-fill"></i> Sicherheitshinweise</h6>
+                    <ul class="mb-0">
+                        {% for warning in schedule.task.safety_warnings %}
+                        <li>{{ warning }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+
+                {% if schedule.task.instruction_url or schedule.task.video_tutorial_url %}
+                <div class="mt-3">
+                    {% if schedule.task.instruction_url %}
+                    <a href="{{ schedule.task.instruction_url }}" target="_blank" class="btn btn-outline-info me-2">
+                        <i class="bi bi-file-text"></i> Anleitung öffnen
+                    </a>
+                    {% endif %}
+                    {% if schedule.task.video_tutorial_url %}
+                    <a href="{{ schedule.task.video_tutorial_url }}" target="_blank" class="btn btn-outline-danger">
+                        <i class="bi bi-play-btn"></i> Video-Tutorial
+                    </a>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Checkliste -->
+        {% if schedule.task.checklist_items %}
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-list-check"></i> Checkliste</h5>
+            </div>
+            <div class="card-body">
+                <div id="checklistContainer">
+                    {% for item in schedule.task.checklist_items %}
+                    <div class="checklist-item" data-index="{{ loop.index0 }}">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="check{{ loop.index0 }}" onchange="toggleChecklistItem({{ loop.index0 }})">
+                            <label class="form-check-label" for="check{{ loop.index0 }}">
+                                <strong>{{ item }}</strong>
+                            </label>
+                        </div>
+                        <div class="mt-2" id="notes{{ loop.index0 }}" style="display: none;">
+                            <input type="text" class="form-control form-control-sm" placeholder="Notizen zu diesem Punkt...">
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Fotos hochladen -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-camera"></i> Fotos</h5>
+            </div>
+            <div class="card-body">
+                <input type="file" class="form-control mb-3" id="photoInput" accept="image/*" multiple onchange="handlePhotoUpload(event)">
+                <div id="photoPreviewContainer"></div>
+            </div>
+        </div>
+
+        <!-- Probleme & Empfehlungen -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-exclamation-triangle"></i> Probleme & Empfehlungen</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label">Gefundene Probleme</label>
+                    <textarea id="issuesFound" class="form-control" rows="3" placeholder="Beschreiben Sie gefundene Probleme..."></textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Empfehlungen für zukünftige Wartungen</label>
+                    <textarea id="recommendations" class="form-control" rows="3" placeholder="Ihre Empfehlungen..."></textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Zusätzliche Notizen</label>
+                    <textarea id="additionalNotes" class="form-control" rows="3" placeholder="Weitere Anmerkungen..."></textarea>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar -->
+    <div class="col-lg-4">
+        <!-- Benötigte Materialien -->
+        {% if schedule.task.required_consumables %}
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-box-seam"></i> Benötigte Materialien</h5>
+            </div>
+            <div class="card-body">
+                {% for tc in schedule.task.required_consumables %}
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <div>
+                        <strong>{{ tc.consumable.name }}</strong>
+                        <br><small class="text-muted">Benötigt: {{ tc.quantity }}x</small>
+                        <br><small class="text-muted">Lager: {{ tc.consumable.stock_level }}x</small>
+                    </div>
+                    <input type="number" class="form-control form-control-sm" style="width: 80px;" 
+                           value="{{ tc.quantity }}" min="0" 
+                           data-consumable-id="{{ tc.consumable.id }}"
+                           id="used{{ tc.consumable.id }}">
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Kosten -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-currency-euro"></i> Kosten</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label">Arbeitskosten (€)</label>
+                    <input type="number" step="0.01" id="laborCost" class="form-control" value="0" min="0">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Materialkosten (€)</label>
+                    <input type="number" step="0.01" id="partsCost" class="form-control" value="0" min="0">
+                </div>
+                <hr>
+                <div class="d-flex justify-content-between">
+                    <strong>Gesamtkosten:</strong>
+                    <strong id="totalCost">0.00 €</strong>
+                </div>
+            </div>
+        </div>
+
+        <!-- Aktionen -->
+        <div class="card">
+            <div class="card-body d-grid gap-2">
+                <button class="btn btn-lg btn-success" onclick="startMaintenance()" id="startBtn">
+                    <i class="bi bi-play-fill"></i> Wartung starten
+                </button>
+                <button class="btn btn-lg btn-primary" onclick="completeMaintenance()" id="completeBtn" style="display: none;">
+                    <i class="bi bi-check-lg"></i> Wartung abschließen
+                </button>
+                <a href="{{ url_for('maintenance_new_bp.printer_schedule', printer_id=schedule.printer.id) }}" 
+                   class="btn btn-lg btn-outline-secondary">
+                    <i class="bi bi-x-lg"></i> Abbrechen
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let executionId = null;
+let startTime = null;
+let timerInterval = null;
+let uploadedPhotos = [];
+
+// Timer
+function updateTimer() {
+    if (!startTime) return;
+    
+    const now = new Date();
+    const elapsed = Math.floor((now - startTime) / 1000);
+    
+    const hours = Math.floor(elapsed / 3600).toString().padStart(2, '0');
+    const minutes = Math.floor((elapsed % 3600) / 60).toString().padStart(2, '0');
+    const seconds = (elapsed % 60).toString().padStart(2, '0');
+    
+    document.getElementById('timer').textContent = `${hours}:${minutes}:${seconds}`;
+}
+
+// Wartung starten
+async function startMaintenance() {
+    const response = await fetch('{{ url_for("maintenance_new_bp.start_execution", schedule_id=schedule.id) }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+        }
+    });
+    
+    const data = await response.json();
+    
+    if (data.status === 'success') {
+        executionId = data.execution_id;
+        startTime = new Date();
+        timerInterval = setInterval(updateTimer, 1000);
+        
+        document.getElementById('startBtn').style.display = 'none';
+        document.getElementById('completeBtn').style.display = 'block';
+        
+        alert('Wartung gestartet! Drucker wurde in den Wartungsmodus versetzt.');
+    } else {
+        alert('Fehler: ' + data.message);
+    }
+}
+
+// Checkliste Toggle
+function toggleChecklistItem(index) {
+    const item = document.querySelector(`.checklist-item[data-index="${index}"]`);
+    const checkbox = document.getElementById(`check${index}`);
+    const notes = document.getElementById(`notes${index}`);
+    
+    if (checkbox.checked) {
+        item.classList.add('completed');
+        notes.style.display = 'block';
+    } else {
+        item.classList.remove('completed');
+        notes.style.display = 'none';
+    }
+}
+
+// Foto-Upload
+function handlePhotoUpload(event) {
+    const files = event.target.files;
+    const container = document.getElementById('photoPreviewContainer');
+    
+    for (let file of files) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const preview = document.createElement('div');
+            preview.className = 'photo-preview';
+            preview.innerHTML = `
+                <img src="${e.target.result}" alt="Foto">
+                <button class="remove-btn" onclick="this.parentElement.remove()">×</button>
+            `;
+            container.appendChild(preview);
+            uploadedPhotos.push(file);
+        };
+        reader.readAsDataURL(file);
+    }
+}
+
+// Kosten berechnen
+document.getElementById('laborCost').addEventListener('input', calculateTotal);
+document.getElementById('partsCost').addEventListener('input', calculateTotal);
+
+
+function calculateTotal() {
+    const labor = parseFloat(document.getElementById('laborCost').value) || 0;
+    const parts = parseFloat(document.getElementById('partsCost').value) || 0;
+    const total = labor + parts;
+    document.getElementById('totalCost').textContent = total.toFixed(2) + ' €';
+}
+
+// Wartung abschließen
+async function completeMaintenance() {
+    if (!executionId) {
+        alert('Wartung wurde noch nicht gestartet!');
+        return;
+    }
+    
+    // Checkliste sammeln
+    const checklistResults = [];
+    const checklistItems = document.querySelectorAll('.checklist-item');
+    checklistItems.forEach((item, index) => {
+        const checkbox = item.querySelector('input[type="checkbox"]');
+        const notesInput = item.querySelector('input[type="text"]');
+        const label = item.querySelector('label strong').textContent;
+        
+        checklistResults.push({
+            item: label,
+            completed: checkbox.checked,
+            notes: notesInput ? notesInput.value : ''
+        });
+    });
+    
+    // Verbrauchte Materialien sammeln
+    const usedConsumables = [];
+    document.querySelectorAll('[data-consumable-id]').forEach(input => {
+        const quantity = parseInt(input.value);
+        if (quantity > 0) {
+            usedConsumables.push({
+                consumable_id: parseInt(input.dataset.consumableId),
+                quantity: quantity
+            });
+        }
+    });
+    
+    // Daten zusammenstellen
+    const data = {
+        checklist_results: checklistResults,
+        used_consumables: usedConsumables,
+        issues_found: document.getElementById('issuesFound').value,
+        recommendations: document.getElementById('recommendations').value,
+        notes: document.getElementById('additionalNotes').value,
+        labor_cost: parseFloat(document.getElementById('laborCost').value) || 0,
+        parts_cost: parseFloat(document.getElementById('partsCost').value) || 0
+    };
+    
+    // Absenden
+    const response = await fetch(`/maintenance-v2/execute/${executionId}/complete`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+        },
+        body: JSON.stringify(data)
+    });
+    
+    const result = await response.json();
+    
+    if (result.status === 'success') {
+        clearInterval(timerInterval);
+        alert('Wartung erfolgreich abgeschlossen!');
+        window.location.href = '{{ url_for("maintenance_new_bp.printer_schedule", printer_id=schedule.printer.id) }}';
+    } else {
+        alert('Fehler: ' + result.message);
+    }
+}
+</script>
+{% endblock %}

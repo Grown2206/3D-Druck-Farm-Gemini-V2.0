@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+
+{% block title %}Wartungs-Dashboard{% endblock %}
+
+{% block content %}
+<div class="main-header">
+    <h1><i class="bi bi-tools"></i> Wartungs-Dashboard</h1>
+    <div class="header-actions">
+        <a href="{{ url_for('maintenance_new_bp.tasks') }}" class="btn btn-primary">
+            <i class="bi bi-card-checklist"></i> Aufgaben verwalten
+        </a>
+        <a href="{{ url_for('maintenance_new_bp.history') }}" class="btn btn-secondary">
+            <i class="bi bi-clock-history"></i> Verlauf
+        </a>
+    </div>
+</div>
+
+<!-- Statistik-Karten -->
+<div class="row g-4 mb-4">
+    <div class="col-md-3">
+        <div class="card text-white bg-danger h-100">
+            <div class="card-body text-center">
+                <i class="bi bi-exclamation-triangle-fill fs-1 mb-2"></i>
+                <h2 class="display-4">{{ overdue }}</h2>
+                <p class="mb-0">Überfällig</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-warning h-100">
+            <div class="card-body text-center">
+                <i class="bi bi-calendar-day fs-1 mb-2 text-dark"></i>
+                <h2 class="display-4 text-dark">{{ due_today }}</h2>
+                <p class="mb-0 text-dark">Heute fällig</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-info h-100">
+            <div class="card-body text-center">
+                <i class="bi bi-calendar-week fs-1 mb-2"></i>
+                <h2 class="display-4">{{ due_this_week }}</h2>
+                <p class="mb-0">Diese Woche</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-primary h-100">
+            <div class="card-body text-center">
+                <i class="bi bi-gear-fill fs-1 mb-2"></i>
+                <h2 class="display-4">{{ in_progress }}</h2>
+                <p class="mb-0">In Bearbeitung</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Anstehende Wartungen -->
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-calendar-check"></i> Anstehende Wartungen</h5>
+            </div>
+            <div class="card-body">
+                {% if upcoming %}
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Status</th>
+                                <th>Drucker</th>
+                                <th>Aufgabe</th>
+                                <th>Geplant</th>
+                                <th>Priorität</th>
+                                <th>Aktion</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for schedule in upcoming %}
+                            <tr class="{% if schedule.status.name == 'OVERDUE' %}table-danger{% elif schedule.scheduled_date.date() == today %}table-warning{% endif %}">
+                                <td>
+                                    {% if schedule.status.name == 'OVERDUE' %}
+                                        <span class="badge bg-danger">Überfällig</span>
+                                    {% elif schedule.status.name == 'IN_PROGRESS' %}
+                                        <span class="badge bg-primary">In Arbeit</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">Geplant</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <a href="{{ url_for('maintenance_new_bp.printer_schedule', printer_id=schedule.printer.id) }}">
+                                        {{ schedule.printer.name }}
+                                    </a>
+                                </td>
+                                <td>{{ schedule.task.title }}</td>
+                                <td>{{ schedule.scheduled_date.strftime('%d.%m.%Y %H:%M') }}</td>
+                                <td>
+                                    <span class="badge 
+                                        {% if schedule.priority.name == 'CRITICAL' %}bg-danger
+                                        {% elif schedule.priority.name == 'HIGH' %}bg-warning text-dark
+                                        {% else %}bg-secondary{% endif %}">
+                                        {{ schedule.priority.value }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <a href="{{ url_for('maintenance_new_bp.execute_maintenance', schedule_id=schedule.id) }}" 
+                                       class="btn btn-sm btn-primary">
+                                        <i class="bi bi-play-fill"></i> Starten
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="alert alert-success mb-0">
+                    <i class="bi bi-check-circle-fill me-2"></i>
+                    Keine anstehenden Wartungen in den nächsten 30 Tagen!
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Letzte Wartungen -->
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-clock-history"></i> Letzte Wartungen</h5>
+            </div>
+            <div class="card-body">
+                {% if recent_executions %}
+                <div class="list-group list-group-flush">
+                    {% for execution in recent_executions %}
+                    <div class="list-group-item px-0">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div class="flex-grow-1">
+                                <h6 class="mb-1">{{ execution.task.title }}</h6>
+                                <p class="mb-1 text-muted small">
+                                    <i class="bi bi-printer"></i> {{ execution.printer.name }}
+                                </p>
+                                <small class="text-muted">
+                                    {{ execution.completed_at.strftime('%d.%m.%Y %H:%M') }}
+                                </small>
+                            </div>
+                            <div>
+                                <span class="badge bg-success">
+                                    <i class="bi bi-check-lg"></i>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-muted text-center mb-0">Noch keine Wartungen durchgeführt</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Schnellzugriff nach Drucker -->
+<div class="card mt-4">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="bi bi-printer-fill"></i> Schnellzugriff nach Drucker</h5>
+    </div>
+    <div class="card-body">
+        <div class="row g-3">
+            {% for printer in Printer.query.order_by(Printer.name).all() %}
+            <div class="col-md-3">
+                <a href="{{ url_for('maintenance_new_bp.printer_schedule', printer_id=printer.id) }}" 
+                   class="btn btn-outline-secondary w-100 d-flex align-items-center justify-content-between">
+                    <span>{{ printer.name }}</span>
+                    <i class="bi bi-chevron-right"></i>
+                </a>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}

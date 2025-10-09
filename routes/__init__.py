@@ -20,6 +20,10 @@ def register_blueprints(app: Flask):
     from .digital_twin import digital_twin_bp
     from .layout_editor import layout_editor_bp
     from .batch_planner import batch_planner_bp
+    from .maintenance_new import maintenance_new_bp
+    from .filament_api import filament_api_bp
+
+
 
     app.register_blueprint(auth_bp, url_prefix='/auth')
     app.register_blueprint(calculator_bp, url_prefix='/calculator')
@@ -40,3 +44,5 @@ def register_blueprints(app: Flask):
     app.register_blueprint(digital_twin_bp)
     app.register_blueprint(layout_editor_bp)
     app.register_blueprint(batch_planner_bp)
+    app.register_blueprint(maintenance_new_bp)
+    app.register_blueprint(filament_api_bp)

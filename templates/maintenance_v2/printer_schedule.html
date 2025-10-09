@@ -1,0 +1,345 @@
+{% extends "base.html" %}
+
+{% block title %}Wartungsplan - {{ printer.name }}{% endblock %}
+
+{% block content %}
+<div class="main-header">
+    <h1><i class="bi bi-printer-fill"></i> Wartungsplan: {{ printer.name }}</h1>
+    <div class="header-actions">
+        <a href="{{ url_for('maintenance_new_bp.generate_qr', printer_id=printer.id) }}" 
+           class="btn btn-outline-secondary" target="_blank">
+            <i class="bi bi-qr-code"></i> QR-Code
+        </a>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#scheduleTaskModal">
+            <i class="bi bi-plus-lg"></i> Wartung planen
+        </button>
+        <a href="{{ url_for('printers_bp.printer_details', printer_id=printer.id) }}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left"></i> Zurück zum Drucker
+        </a>
+    </div>
+</div>
+
+<!-- Drucker-Info -->
+<div class="row g-4 mb-4">
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body text-center">
+                <h6 class="text-muted">Gesamtlaufzeit</h6>
+                <h3>{{ "%.1f"|format(printer.total_print_hours) }} h</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body text-center">
+                <h6 class="text-muted">Letzte Wartung</h6>
+                <h3>{{ printer.last_maintenance_date.strftime('%d.%m.%Y') if printer.last_maintenance_date else 'Nie' }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body text-center">
+                <h6 class="text-muted">Stunden seit Wartung</h6>
+                <h3>{{ "%.1f"|format((printer.total_print_hours or 0) - (printer.last_maintenance_h or 0)) }} h</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body text-center">
+                <h6 class="text-muted">Status</h6>
+                <h3><span class="badge status-{{ printer.status.name|lower }}">{{ printer.status.value }}</span></h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Geplante Wartungen -->
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="bi bi-calendar-check"></i> Geplante Wartungen</h5>
+    </div>
+    <div class="card-body">
+        {% if schedules %}
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Status</th>
+                        <th>Aufgabe</th>
+                        <th>Geplant für</th>
+                        <th>Fällig bis</th>
+                        <th>Priorität</th>
+                        <th>Zugewiesen</th>
+                        <th>Aktionen</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for schedule in schedules %}
+                    {% if schedule.status.name not in ['COMPLETED', 'CANCELLED'] %}
+                    <tr class="{% if schedule.status.name == 'OVERDUE' %}table-danger{% elif schedule.status.name == 'IN_PROGRESS' %}table-primary{% endif %}">
+                        <td>
+                            {% if schedule.status.name == 'OVERDUE' %}
+                                <span class="badge bg-danger">Überfällig</span>
+                            {% elif schedule.status.name == 'IN_PROGRESS' %}
+                                <span class="badge bg-primary">In Arbeit</span>
+                            {% else %}
+                                <span class="badge bg-secondary">Geplant</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <strong>{{ schedule.task.title }}</strong>
+                            {% if schedule.task.estimated_duration_min %}
+                            <br><small class="text-muted">~{{ schedule.task.estimated_duration_min }} min</small>
+                            {% endif %}
+                        </td>
+                        <td>{{ schedule.scheduled_date.strftime('%d.%m.%Y %H:%M') }}</td>
+                        <td>
+                            {% if schedule.due_date %}
+                                {{ schedule.due_date.strftime('%d.%m.%Y') }}
+                                {% if schedule.due_date < now %}
+                                    <i class="bi bi-exclamation-triangle-fill text-danger"></i>
+                                {% endif %}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge 
+                                {% if schedule.priority.name == 'CRITICAL' %}bg-danger
+                                {% elif schedule.priority.name == 'HIGH' %}bg-warning text-dark
+                                {% elif schedule.priority.name == 'MEDIUM' %}bg-info
+                                {% else %}bg-secondary{% endif %}">
+                                {{ schedule.priority.value }}
+                            </span>
+                        </td>
+                        <td>
+                            {% if schedule.assigned_to %}
+                                {{ schedule.assigned_to.username }}
+                            {% else %}
+                                <span class="text-muted">Nicht zugewiesen</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if schedule.status.name == 'IN_PROGRESS' %}
+                                <a href="{{ url_for('maintenance_new_bp.execute_maintenance', schedule_id=schedule.id) }}" 
+                                   class="btn btn-sm btn-success">
+                                    <i class="bi bi-check-lg"></i> Fortsetzen
+                                </a>
+                            {% else %}
+                                <a href="{{ url_for('maintenance_new_bp.execute_maintenance', schedule_id=schedule.id) }}" 
+                                   class="btn btn-sm btn-primary">
+                                    <i class="bi bi-play-fill"></i> Starten
+                                </a>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endif %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="alert alert-info mb-0">
+            <i class="bi bi-info-circle-fill me-2"></i>
+            Keine geplanten Wartungen vorhanden.
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Wartungsverlauf -->
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="bi bi-clock-history"></i> Wartungsverlauf</h5>
+    </div>
+    <div class="card-body">
+        {% if executions %}
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Aufgabe</th>
+                        <th>Durchgeführt</th>
+                        <th>Von</th>
+                        <th>Dauer</th>
+                        <th>Kosten</th>
+                        <th>Details</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for execution in executions %}
+                    <tr>
+                        <td>{{ execution.task.title }}</td>
+                        <td>{{ execution.completed_at.strftime('%d.%m.%Y %H:%M') }}</td>
+                        <td>{{ execution.performed_by.username }}</td>
+                        <td>{{ execution.actual_duration_min }} min</td>
+                        <td>
+                            {% if execution.total_cost %}
+                                {{ "%.2f"|format(execution.total_cost) }} €
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-info" 
+                                    data-bs-toggle="modal" 
+                                    data-bs-target="#executionModal{{ execution.id }}">
+                                <i class="bi bi-eye"></i> Details
+                            </button>
+                        </td>
+                    </tr>
+
+                    <!-- Execution Details Modal -->
+                    <div class="modal fade" id="executionModal{{ execution.id }}" tabindex="-1">
+                        <div class="modal-dialog modal-lg">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">{{ execution.task.title }}</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <div class="row mb-3">
+                                        <div class="col-md-6">
+                                            <strong>Durchgeführt von:</strong> {{ execution.performed_by.username }}
+                                        </div>
+                                        <div class="col-md-6">
+                                            <strong>Datum:</strong> {{ execution.completed_at.strftime('%d.%m.%Y %H:%M') }}
+                                        </div>
+                                    </div>
+                                    <div class="row mb-3">
+                                        <div class="col-md-6">
+                                            <strong>Dauer:</strong> {{ execution.actual_duration_min }} Minuten
+                                        </div>
+                                        <div class="col-md-6">
+                                            <strong>Gesamtkosten:</strong> {{ "%.2f"|format(execution.total_cost) if execution.total_cost else '-' }} €
+                                        </div>
+                                    </div>
+
+                                    {% if execution.checklist_results %}
+                                    <h6 class="mt-3">Checkliste</h6>
+                                    <ul class="list-unstyled">
+                                        {% for item in execution.checklist_results %}
+                                        <li class="mb-2">
+                                            {% if item.completed %}
+                                                <i class="bi bi-check-circle-fill text-success"></i>
+                                            {% else %}
+                                                <i class="bi bi-x-circle-fill text-danger"></i>
+                                            {% endif %}
+                                            {{ item.item }}
+                                            {% if item.notes %}
+                                                <br><small class="text-muted ms-4">{{ item.notes }}</small>
+                                            {% endif %}
+                                        </li>
+                                        {% endfor %}
+                                    </ul>
+                                    {% endif %}
+
+                                    {% if execution.used_consumables %}
+                                    <h6 class="mt-3">Verbrauchte Materialien</h6>
+                                    <ul>
+                                        {% for uc in execution.used_consumables %}
+                                        <li>{{ uc.consumable.name }} ({{ uc.quantity_used }}x)</li>
+                                        {% endfor %}
+                                    </ul>
+                                    {% endif %}
+
+                                    {% if execution.issues_found %}
+                                    <h6 class="mt-3"><i class="bi bi-exclamation-triangle text-warning"></i> Gefundene Probleme</h6>
+                                    <p class="text-break">{{ execution.issues_found }}</p>
+                                    {% endif %}
+
+                                    {% if execution.recommendations %}
+                                    <h6 class="mt-3"><i class="bi bi-lightbulb text-info"></i> Empfehlungen</h6>
+                                    <p class="text-break">{{ execution.recommendations }}</p>
+                                    {% endif %}
+
+                                    {% if execution.notes %}
+                                    <h6 class="mt-3">Zusätzliche Notizen</h6>
+                                    <p class="text-break">{{ execution.notes }}</p>
+                                    {% endif %}
+
+                                    {% if execution.photos %}
+                                    <h6 class="mt-3">Fotos</h6>
+                                    <div class="row g-2">
+                                        {% for photo in execution.photos %}
+                                        <div class="col-md-4">
+                                            <img src="{{ url_for('static', filename=photo.url) }}" 
+                                                 class="img-fluid rounded" 
+                                                 alt="{{ photo.caption }}">
+                                            {% if photo.caption %}
+                                            <small class="text-muted">{{ photo.caption }}</small>
+                                            {% endif %}
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="alert alert-info mb-0">
+            <i class="bi bi-info-circle-fill me-2"></i>
+            Noch keine Wartungen für diesen Drucker durchgeführt.
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Schedule Task Modal -->
+<div class="modal fade" id="scheduleTaskModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Wartung planen für {{ printer.name }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('maintenance_new_bp.schedule_task', printer_id=printer.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Wartungsaufgabe*</label>
+                        <select name="task_id" class="form-select" required>
+                            <option value="">-- Aufgabe auswählen --</option>
+                            {% for task in MaintenanceTaskNew.query.filter_by(is_active=True).all() %}
+                            <option value="{{ task.id }}">{{ task.title }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Geplant für*</label>
+                        <input type="datetime-local" name="scheduled_date" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Fällig bis</label>
+                        <input type="date" name="due_date" class="form-control">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Zuweisen an</label>
+                        <select name="assigned_to_user_id" class="form-select">
+                            <option value="">-- Nicht zugewiesen --</option>
+                            {% for user in User.query.all() %}
+                            <option value="{{ user.id }}">{{ user.username }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Notizen</label>
+                        <textarea name="notes" class="form-control" rows="3"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                    <button type="submit" class="btn btn-primary">Wartung planen</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

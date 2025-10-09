@@ -1,0 +1,558 @@
+{% extends "base.html" %}
+
+{% block title %}Filament-Trockner{% endblock %}
+
+{% block head_extra %}
+<style>
+    .drying-card {
+        border-left: 4px solid #fd7e14;
+        background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+    }
+    .drying-progress {
+        height: 8px;
+        border-radius: 4px;
+        overflow: hidden;
+    }
+    .timer-display {
+        font-family: 'Courier New', monospace;
+        font-size: 1.2rem;
+        font-weight: bold;
+        color: #fd7e14;
+    }
+    .material-card {
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .material-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    .forecast-badge {
+        font-size: 0.8rem;
+        padding: 0.3rem 0.6rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="main-header">
+    <h1><i class="bi bi-thermometer-half"></i> Filament-Trockner & Management</h1>
+    <div class="header-actions">
+        <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#startDryingModal">
+            <i class="bi bi-plus-lg"></i> Trocknung starten
+        </button>
+        <button class="btn btn-outline-info" onclick="refreshAll()">
+            <i class="bi bi-arrow-clockwise"></i> Aktualisieren
+        </button>
+    </div>
+</div>
+
+<!-- Aktive Trocknungen -->
+<div class="row g-4 mb-4" id="activeDryingSessions">
+    <!-- Wird per JavaScript gefüllt -->
+</div>
+
+<!-- Quick-Statistiken -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card bg-primary text-white">
+            <div class="card-body text-center">
+                <i class="bi bi-thermometer-half fs-1"></i>
+                <h4 id="activeDryingCount">0</h4>
+                <small>Aktive Trocknungen</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-warning text-dark">
+            <div class="card-body text-center">
+                <i class="bi bi-exclamation-triangle fs-1"></i>
+                <h4 id="expiringSpoolsCount">0</h4>
+                <small>Bald ablaufend</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-info text-white">
+            <div class="card-body text-center">
+                <i class="bi bi-moisture fs-1"></i>
+                <h4 id="needsDryingCount">0</h4>
+                <small>Trocknung empfohlen</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-success text-white">
+            <div class="card-body text-center">
+                <i class="bi bi-check-circle fs-1"></i>
+                <h4 id="readySpoolsCount">0</h4>
+                <small>Einsatzbereit</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Verbrauchsprognosen -->
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0">
+            <i class="bi bi-graph-up"></i> Verbrauchsprognosen
+            <span class="badge bg-secondary ms-2" id="forecastCount">0</span>
+        </h5>
+    </div>
+    <div class="card-body">
+        <div id="forecastContainer" class="row g-3">
+            <!-- Wird per JavaScript gefüllt -->
+        </div>
+    </div>
+</div>
+
+<!-- Spulen-Übersicht -->
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="bi bi-disc"></i> Spulen-Übersicht</h5>
+        <div>
+            <button class="btn btn-sm btn-outline-info" data-bs-toggle="modal" data-bs-target="#updateWeightModal">
+                <i class="bi bi-speedometer2"></i> Gewicht aktualisieren
+            </button>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="row g-3" id="spoolsContainer">
+            {% for spool in spools %}
+            <div class="col-lg-4 col-md-6">
+                <div class="card material-card h-100" data-spool-id="{{ spool.id }}">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div class="flex-grow-1">
+                                <h6 class="card-title mb-1">
+                                    <span class="badge" style="background-color: {{ spool.filament_type.color_hex }}; color: {{ 'black' if spool.filament_type.is_color_light() else 'white' }}">
+                                        {{ spool.short_id }}
+                                    </span>
+                                </h6>
+                                <p class="card-text small text-muted mb-1">
+                                    {{ spool.filament_type.manufacturer }} {{ spool.filament_type.name }}
+                                </p>
+                            </div>
+                            <div class="text-end">
+                                <button class="btn btn-sm btn-outline-secondary" onclick="generateQR({{ spool.id }})">
+                                    <i class="bi bi-qr-code"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Gewichts-Info -->
+                        <div class="mb-2">
+                            <div class="d-flex justify-content-between small">
+                                <span>Gewicht:</span>
+                                <span><strong>{{ spool.current_weight_g }}g</strong></span>
+                            </div>
+                            <div class="progress" style="height: 6px;">
+                                <div class="progress-bar" style="width: {{ spool.remaining_percentage }}%"></div>
+                            </div>
+                            <div class="text-center small text-muted">{{ spool.remaining_percentage }}%</div>
+                        </div>
+
+                        <!-- Status-Badges -->
+                        <div class="mb-2">
+                            {% if spool.is_currently_drying %}
+                                <span class="badge bg-warning text-dark">
+                                    <i class="bi bi-thermometer-half"></i> Trocknet
+                                </span>
+                            {% endif %}
+                            {% if spool.is_expired %}
+                                <span class="badge bg-danger">
+                                    <i class="bi bi-exclamation-triangle"></i> Abgelaufen
+                                </span>
+                            {% elif spool.is_expiring_soon %}
+                                <span class="badge bg-warning text-dark">
+                                    <i class="bi bi-clock"></i> Läuft ab
+                                </span>
+                            {% endif %}
+                            {% if spool.needs_drying and not spool.is_currently_drying %}
+                                <span class="badge bg-info">
+                                    <i class="bi bi-moisture"></i> Trocknung empfohlen
+                                </span>
+                            {% endif %}
+                        </div>
+
+                        <!-- Lagerort -->
+                        {% if spool.storage_location %}
+                        <div class="small text-muted mb-2">
+                            <i class="bi bi-geo-alt"></i> {{ spool.storage_location }}
+                        </div>
+                        {% endif %}
+
+                        <!-- Prognose -->
+                        <div id="forecast-{{ spool.id }}" class="forecast-display small">
+                            <!-- Wird per JavaScript gefüllt -->
+                        </div>
+
+                        <!-- Aktionen -->
+                        <div class="btn-group w-100 mt-2" role="group">
+                            {% if not spool.is_currently_drying %}
+                            <button class="btn btn-sm btn-outline-warning" onclick="startDrying({{ spool.id }})">
+                                <i class="bi bi-thermometer-half"></i>
+                            </button>
+                            {% endif %}
+                            <button class="btn btn-sm btn-outline-info" onclick="updateWeight({{ spool.id }})">
+                                <i class="bi bi-speedometer2"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<!-- Modals -->
+<!-- Start Drying Modal -->
+<div class="modal fade" id="startDryingModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Trocknung starten</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="dryingForm">
+                    <div class="mb-3">
+                        <label class="form-label">Spule</label>
+                        <select class="form-select" id="dryingSpoolId" required>
+                            <option value="">Spule auswählen...</option>
+                            {% for spool in spools %}
+                            <option value="{{ spool.id }}">{{ spool.short_id }} - {{ spool.filament_type.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Temperatur (°C)</label>
+                        <input type="number" class="form-control" id="dryingTemp" min="40" max="80" value="60" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Dauer (Stunden)</label>
+                        <input type="number" class="form-control" id="dryingDuration" min="1" max="24" value="6" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Notizen</label>
+                        <textarea class="form-control" id="dryingNotes" rows="2"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                <button type="button" class="btn btn-warning" onclick="submitDrying()">Trocknung starten</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Weight Update Modal -->
+<div class="modal fade" id="updateWeightModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Gewicht aktualisieren</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="weightForm">
+                    <div class="mb-3">
+                        <label class="form-label">Spule</label>
+                        <select class="form-select" id="weightSpoolId" required>
+                            <option value="">Spule auswählen...</option>
+                            {% for spool in spools %}
+                            <option value="{{ spool.id }}">{{ spool.short_id }} - {{ spool.current_weight_g }}g</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Neues Gewicht (g)</label>
+                        <input type="number" class="form-control" id="newWeight" min="0" step="0.1" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Notizen</label>
+                        <textarea class="form-control" id="weightNotes" rows="2"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                <button type="button" class="btn btn-primary" onclick="submitWeight()">Gewicht speichern</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let timers = {};
+
+// Initialisierung
+document.addEventListener('DOMContentLoaded', function() {
+    loadDryingSessions();
+    loadForecasts();
+    
+    // Alle 30 Sekunden aktualisieren
+    setInterval(function() {
+        loadDryingSessions();
+    }, 30000);
+});
+
+// Aktive Trocknungen laden
+async function loadDryingSessions() {
+    try {
+        const response = await fetch('/api/filament/drying-status');
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            displayDryingSessions(data.active_sessions);
+            document.getElementById('activeDryingCount').textContent = data.total_active;
+        }
+    } catch (error) {
+        console.error('Fehler beim Laden der Trocknungen:', error);
+    }
+}
+
+// Trocknungen anzeigen
+function displayDryingSessions(sessions) {
+    const container = document.getElementById('activeDryingSessions');
+    container.innerHTML = '';
+    
+    sessions.forEach(session => {
+        const div = document.createElement('div');
+        div.className = 'col-lg-4 col-md-6';
+        div.innerHTML = `
+            <div class="card drying-card h-100" data-session-id="${session.id}">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-3">
+                        <div>
+                            <h6 class="card-title mb-1">
+                                <span class="badge" style="background-color: ${session.spool.color}">
+                                    ${session.spool.short_id}
+                                </span>
+                            </h6>
+                            <p class="card-text small">${session.spool.material}</p>
+                        </div>
+                        <div class="text-end">
+                            <div class="timer-display">
+                                ${formatTime(session.remaining_minutes)}
+                            </div>
+                            <small class="text-muted">${session.temperature}°C</small>
+                        </div>
+                    </div>
+                    
+                    <div class="drying-progress mb-3">
+                        <div class="progress-bar bg-warning" style="width: ${session.progress_percentage}%"></div>
+                    </div>
+                    
+                    <div class="d-flex justify-content-between align-items-center">
+                        <small class="text-muted">
+                            Gestartet: ${new Date(session.start_time).toLocaleTimeString()}
+                        </small>
+                        <button class="btn btn-sm btn-success" onclick="completeDrying(${session.id})">
+                            <i class="bi bi-check-lg"></i> Fertig
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+        container.appendChild(div);
+    });
+}
+
+// Zeit formatieren
+function formatTime(minutes) {
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
+}
+
+// Trocknung starten
+function startDrying(spoolId) {
+    document.getElementById('dryingSpoolId').value = spoolId;
+    const modal = new bootstrap.Modal(document.getElementById('startDryingModal'));
+    modal.show();
+}
+
+// Trocknung einreichen
+async function submitDrying() {
+    const data = {
+        spool_id: parseInt(document.getElementById('dryingSpoolId').value),
+        temperature: parseInt(document.getElementById('dryingTemp').value),
+        duration_hours: parseInt(document.getElementById('dryingDuration').value),
+        notes: document.getElementById('dryingNotes').value
+    };
+    
+    try {
+        const response = await fetch('/api/filament/start-drying', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrf_token]').value
+            },
+            body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        
+        if (result.status === 'success') {
+            alert(result.message);
+            bootstrap.Modal.getInstance(document.getElementById('startDryingModal')).hide();
+            loadDryingSessions();
+        } else {
+            alert('Fehler: ' + result.message);
+        }
+    } catch (error) {
+        alert('Fehler beim Starten der Trocknung');
+    }
+}
+
+// Trocknung abschließen
+async function completeDrying(sessionId) {
+    if (!confirm('Trocknung wirklich abschließen?')) return;
+    
+    try {
+        const response = await fetch(`/api/filament/complete-drying/${sessionId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrf_token]').value
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            alert(data.message);
+            loadDryingSessions();
+        } else {
+            alert('Fehler: ' + data.message);
+        }
+    } catch (error) {
+        alert('Fehler beim Abschließen der Trocknung');
+    }
+}
+
+// Prognosen laden
+async function loadForecasts() {
+    try {
+        const response = await fetch('/api/filament/forecast');
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            displayForecasts(data.forecasts);
+        }
+    } catch (error) {
+        console.error('Fehler beim Laden der Prognosen:', error);
+    }
+}
+
+// Prognosen anzeigen
+function displayForecasts(forecasts) {
+    const container = document.getElementById('forecastContainer');
+    container.innerHTML = '';
+    
+    document.getElementById('forecastCount').textContent = forecasts.length;
+    
+    forecasts.forEach(forecast => {
+        const div = document.createElement('div');
+        div.className = 'col-md-4';
+        
+        const statusClass = forecast.status === 'critical' ? 'bg-danger' : 
+                          forecast.status === 'warning' ? 'bg-warning text-dark' : 'bg-success';
+        
+        div.innerHTML = `
+            <div class="card">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title mb-1">${forecast.material}</h6>
+                            <small class="text-muted">${forecast.total_weight_g}g verbleibend</small>
+                        </div>
+                        <span class="badge forecast-badge ${statusClass}">
+                            ${forecast.forecast.days_remaining} Tage
+                        </span>
+                    </div>
+                </div>
+            </div>
+        `;
+        container.appendChild(div);
+    });
+}
+
+// QR-Code generieren
+async function generateQR(spoolId) {
+    try {
+        const response = await fetch(`/api/filament/qr-code/${spoolId}`);
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            // QR-Code in neuem Fenster anzeigen
+            const newWindow = window.open('', '_blank');
+            newWindow.document.write(`
+                <html>
+                    <head><title>QR-Code - ${data.qr_code_data.short_id}</title></head>
+                    <body style="text-align: center; padding: 20px;">
+                        <h2>QR-Code für ${data.qr_code_data.short_id}</h2>
+                        <img src="${data.qr_code_image}" alt="QR-Code">
+                        <p>${data.qr_code_data.material}</p>
+                    </body>
+                </html>
+            `);
+        }
+    } catch (error) {
+        alert('Fehler beim Generieren des QR-Codes');
+    }
+}
+
+// Gewicht aktualisieren
+function updateWeight(spoolId) {
+    document.getElementById('weightSpoolId').value = spoolId;
+    const modal = new bootstrap.Modal(document.getElementById('updateWeightModal'));
+    modal.show();
+}
+
+// Gewicht einreichen
+async function submitWeight() {
+    const data = {
+        spool_id: parseInt(document.getElementById('weightSpoolId').value),
+        weight_g: parseFloat(document.getElementById('newWeight').value),
+        notes: document.getElementById('weightNotes').value
+    };
+    
+    try {
+        const response = await fetch('/api/filament/update-weight', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrf_token]').value
+            },
+            body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        
+        if (result.status === 'success') {
+            alert(result.message);
+            bootstrap.Modal.getInstance(document.getElementById('updateWeightModal')).hide();
+            location.reload(); // Seite neu laden für aktualisierte Gewichte
+        } else {
+            alert('Fehler: ' + result.message);
+        }
+    } catch (error) {
+        alert('Fehler beim Aktualisieren des Gewichts');
+    }
+}
+
+// Alle Daten aktualisieren
+function refreshAll() {
+    loadDryingSessions();
+    loadForecasts();
+    alert('Daten aktualisiert');
+}
+</script>
+{% endblock %}

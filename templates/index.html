@@ -43,6 +43,47 @@
     }
     .card.border-danger { animation: pulse-danger 2s infinite; }
     .card.border-warning { animation: pulse-warning 2.5s infinite; }
+    
+    /* Filament Modal Styles */
+    .spool-card {
+        cursor: pointer;
+        transition: all 0.2s ease;
+        border: 2px solid transparent;
+    }
+    .spool-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+    .spool-card.selected {
+        border-color: #0d6efd;
+        background-color: rgba(13, 110, 253, 0.1);
+    }
+    .spool-card.current {
+        border-color: #198754;
+        background-color: rgba(25, 135, 84, 0.1);
+    }
+    .spool-weight-indicator {
+        height: 4px;
+        background: #e9ecef;
+        border-radius: 2px;
+        overflow: hidden;
+    }
+    .spool-weight-bar {
+        height: 100%;
+        transition: width 0.3s ease;
+    }
+    .loading-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1050;
+    }
 </style>
 {% endblock %}
 
@@ -264,7 +305,9 @@
     </div>
 </div>
 
-<!-- Modals bleiben unverändert -->
+<!-- Modals -->
+
+<!-- Image Preview Modal -->
 <div class="modal fade" id="imagePreviewModal" tabindex="-1" aria-labelledby="imagePreviewModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content bg-dark">
@@ -279,6 +322,7 @@
     </div>
 </div>
 
+<!-- Job Assignment Modal -->
 <div class="modal fade" id="assignJobModal" tabindex="-1" aria-labelledby="assignJobModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -308,6 +352,111 @@
         </div>
     </div>
 </div>
+
+<!-- Filament Change Modal -->
+<div class="modal fade" id="changeFilamentModal" tabindex="-1" aria-labelledby="changeFilamentModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="changeFilamentModalLabel">Filament wechseln</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body position-relative">
+                <!-- Loading Overlay -->
+                <div id="filamentModalLoading" class="loading-overlay d-none">
+                    <div class="text-center text-white">
+                        <div class="spinner-border" role="status">
+                            <span class="visually-hidden">Lädt...</span>
+                        </div>
+                        <p class="mt-2">Lade verfügbare Spulen...</p>
+                    </div>
+                </div>
+                
+                <!-- Drucker Info -->
+                <div class="mb-4">
+                    <h6><i class="bi bi-printer"></i> Drucker: <span id="selectedPrinterName">-</span></h6>
+                </div>
+                
+                <!-- Aktuelle Spule -->
+                <div class="mb-4" id="currentSpoolSection">
+                    <h6><i class="bi bi-disc"></i> Aktuell geladen:</h6>
+                    <div id="currentSpoolDisplay" class="alert alert-info">
+                        <i class="bi bi-info-circle"></i> Keine Spule geladen
+                    </div>
+                </div>
+                
+                <!-- Verfügbare Spulen -->
+                <div class="mb-4">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6><i class="bi bi-collection"></i> Verfügbare Spulen:</h6>
+                        <small class="text-muted" id="availableSpoolsCount">-</small>
+                    </div>
+                    
+                    <!-- Filter -->
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-6">
+                            <input type="text" class="form-control form-control-sm" id="spoolSearchFilter" 
+                                   placeholder="Nach Material suchen...">
+                        </div>
+                        <div class="col-md-6">
+                            <select class="form-select form-select-sm" id="materialTypeFilter">
+                                <option value="">Alle Materialtypen</option>
+                                <option value="PLA">PLA</option>
+                                <option value="PETG">PETG</option>
+                                <option value="ABS">ABS</option>
+                                <option value="ASA">ASA</option>
+                                <option value="TPU">TPU</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <!-- Spulen Grid -->
+                    <div id="availableSpoolsGrid" class="row g-3" style="max-height: 400px; overflow-y: auto;">
+                        <!-- Wird dynamisch gefüllt -->
+                    </div>
+                </div>
+                
+                <!-- Fehler-Anzeige -->
+                <div id="filamentModalError" class="alert alert-danger d-none">
+                    <i class="bi bi-exclamation-triangle"></i> <span id="errorMessage"></span>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                <button type="button" class="btn btn-danger" id="unloadSpoolBtn" disabled>
+                    <i class="bi bi-eject"></i> Spule entladen
+                </button>
+                <button type="button" class="btn btn-primary" id="assignSpoolBtn" disabled>
+                    <i class="bi bi-check-lg"></i> Spule laden
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filament Trockner Widget -->
+<div class="col-lg-6 col-md-12">
+    <div class="card h-100">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h6 class="mb-0">
+                <i class="bi bi-thermometer-half text-warning"></i> 
+                Filament-Trockner
+            </h6>
+            <a href="{{ url_for('materials_bp.dryer_dashboard') }}" class="btn btn-sm btn-outline-primary">
+                Details
+            </a>
+        </div>
+        <div class="card-body">
+            <div id="dryingStatus">
+                <div class="text-center text-muted">
+                    <div class="spinner-border spinner-border-sm" role="status"></div>
+                    <span class="ms-2">Lade Trocknerstatus...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
@@ -315,6 +464,11 @@
 document.addEventListener('DOMContentLoaded', function() {
     const csrfToken = "{{ csrf_token() }}";
     const socket = io();
+    
+    // Global variables for filament modal
+    let currentPrinterId = null;
+    let selectedSpoolId = null;
+    let availableSpools = [];
     
     // Wartungserinnerung
     const overdueCount = {{ overdue_printers | length }};
@@ -347,6 +501,31 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // Filament Change Modal Setup
+    const changeFilamentModal = document.getElementById('changeFilamentModal');
+    if (changeFilamentModal) {
+        changeFilamentModal.addEventListener('show.bs.modal', function(event) {
+            const button = event.relatedTarget;
+            currentPrinterId = button.getAttribute('data-printer-id');
+            const printerName = button.getAttribute('data-printer-name');
+            
+            document.getElementById('selectedPrinterName').textContent = printerName;
+            loadAvailableSpools(currentPrinterId);
+        });
+        
+        changeFilamentModal.addEventListener('hidden.bs.modal', function() {
+            resetFilamentModal();
+        });
+    }
+
+    // Filter für Spulen
+    document.getElementById('spoolSearchFilter')?.addEventListener('input', filterSpools);
+    document.getElementById('materialTypeFilter')?.addEventListener('change', filterSpools);
+    
+    // Button Event Listeners
+    document.getElementById('assignSpoolBtn')?.addEventListener('click', assignSelectedSpool);
+    document.getElementById('unloadSpoolBtn')?.addEventListener('click', unloadCurrentSpool);
+
     function formatTime(totalSeconds) {
         if (totalSeconds === null || totalSeconds < 0) return '00:00:00';
         const h = Math.floor(totalSeconds / 3600).toString().padStart(2, '0');
@@ -369,6 +548,19 @@ document.addEventListener('DOMContentLoaded', function() {
                     <span class="material-dot" style="background-color: ${printerData.current_spool.color_hex};"></span>
                     ${printerData.current_spool.name} (~${remainingGrams}g)
                 </span>
+                <button class="btn btn-xs btn-outline-light" 
+                        data-bs-toggle="modal" 
+                        data-bs-target="#changeFilamentModal"
+                        data-printer-id="${printerData.id}"
+                        data-printer-name="${printerData.name}"
+                        title="Filament wechseln">
+                    <i class="bi bi-arrow-repeat"></i>
+                </button>
+            </div>`;
+        } else {
+             spoolInfo = `
+            <div class="d-flex justify-content-between card-info-row">
+                <span class="text-muted"><i>Keine Spule geladen</i></span>
                 <button class="btn btn-xs btn-outline-light" 
                         data-bs-toggle="modal" 
                         data-bs-target="#changeFilamentModal"
@@ -515,6 +707,265 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // Filament Modal Functions
+    async function loadAvailableSpools(printerId) {
+        showFilamentLoading(true);
+        showFilamentError(false);
+        
+        try {
+            const response = await fetch(`/api/filament/available-spools/${printerId}`);
+            const data = await response.json();
+            
+            if (data.status === 'success') {
+                availableSpools = data.available_spools;
+                displayCurrentSpool(data.current_spool);
+                renderAvailableSpools();
+                updateSpoolsCount();
+            } else {
+                showFilamentError(true, data.message);
+            }
+        } catch (error) {
+            showFilamentError(true, 'Netzwerkfehler beim Laden der Spulen');
+        } finally {
+            showFilamentLoading(false);
+        }
+    }
+    
+    function displayCurrentSpool(currentSpool) {
+        const currentDisplay = document.getElementById('currentSpoolDisplay');
+        const unloadBtn = document.getElementById('unloadSpoolBtn');
+        
+        if (currentSpool) {
+            currentDisplay.className = 'alert alert-success';
+            currentDisplay.innerHTML = `
+                <div class="d-flex align-items-center">
+                    <div class="material-dot me-2" style="background-color: ${currentSpool.color_hex}; width: 16px; height: 16px;"></div>
+                    <div class="flex-grow-1">
+                        <strong>${currentSpool.short_id}</strong> - ${currentSpool.material_name}<br>
+                        <small class="text-muted">${currentSpool.current_weight_g}g (${currentSpool.remaining_percentage}%)</small>
+                    </div>
+                </div>
+            `;
+            unloadBtn.disabled = false;
+        } else {
+            currentDisplay.className = 'alert alert-info';
+            currentDisplay.innerHTML = '<i class="bi bi-info-circle"></i> Keine Spule geladen';
+            unloadBtn.disabled = true;
+        }
+    }
+    
+    function renderAvailableSpools() {
+        const grid = document.getElementById('availableSpoolsGrid');
+        
+        if (availableSpools.length === 0) {
+            grid.innerHTML = `
+                <div class="col-12">
+                    <div class="alert alert-warning text-center">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        Keine verfügbaren Spulen gefunden
+                    </div>
+                </div>
+            `;
+            return;
+        }
+        
+        const spoolCards = availableSpools.map(spool => `
+            <div class="col-md-6 col-lg-4" data-spool-search="${spool.material_name.toLowerCase()}" data-material-type="${spool.material_type}">
+                <div class="card spool-card h-100" data-spool-id="${spool.id}" onclick="selectSpool(${spool.id})">
+                    <div class="card-body p-3">
+                        <div class="d-flex align-items-center mb-2">
+                            <div class="material-dot me-2" style="background-color: ${spool.color_hex}; width: 16px; height: 16px;"></div>
+                            <div class="flex-grow-1">
+                                <h6 class="card-title mb-0">${spool.short_id}</h6>
+                                <small class="text-muted">${spool.material_type}</small>
+                            </div>
+                        </div>
+                        <p class="card-text small mb-2">${spool.material_name}</p>
+                        <div class="mb-2">
+                            <div class="d-flex justify-content-between small text-muted">
+                                <span>${spool.current_weight_g}g</span>
+                                <span>${spool.remaining_percentage}%</span>
+                            </div>
+                            <div class="spool-weight-indicator">
+                                <div class="spool-weight-bar bg-success" style="width: ${spool.remaining_percentage}%"></div>
+                            </div>
+                        </div>
+                        <small class="text-muted">
+                            <i class="bi bi-geo-alt"></i> ${spool.storage_location}
+                        </small>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+        
+        grid.innerHTML = spoolCards;
+    }
+    
+    function selectSpool(spoolId) {
+        // Alle Karten deselektieren
+        document.querySelectorAll('.spool-card').forEach(card => {
+            card.classList.remove('selected');
+        });
+        
+        // Ausgewählte Karte markieren
+        const selectedCard = document.querySelector(`[data-spool-id="${spoolId}"]`);
+        if (selectedCard) {
+            selectedCard.classList.add('selected');
+            selectedSpoolId = spoolId;
+            document.getElementById('assignSpoolBtn').disabled = false;
+        }
+    }
+    
+    function filterSpools() {
+        const searchTerm = document.getElementById('spoolSearchFilter').value.toLowerCase();
+        const materialType = document.getElementById('materialTypeFilter').value;
+        
+        document.querySelectorAll('#availableSpoolsGrid .col-md-6').forEach(col => {
+            const searchText = col.dataset.spoolSearch;
+            const matType = col.dataset.materialType;
+            
+            const matchesSearch = !searchTerm || searchText.includes(searchTerm);
+            const matchesType = !materialType || matType === materialType;
+            
+            col.style.display = (matchesSearch && matchesType) ? 'block' : 'none';
+        });
+        
+        updateSpoolsCount();
+    }
+    
+    function updateSpoolsCount() {
+        const visible = document.querySelectorAll('#availableSpoolsGrid .col-md-6:not([style*="display: none"])').length;
+        const total = availableSpools.length;
+        document.getElementById('availableSpoolsCount').textContent = `${visible} von ${total} Spulen`;
+    }
+    
+    async function assignSelectedSpool() {
+        if (!selectedSpoolId || !currentPrinterId) return;
+        
+        try {
+            showFilamentLoading(true);
+            
+            const response = await fetch('/api/filament/assign-spool', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify({
+                    printer_id: currentPrinterId,
+                    spool_id: selectedSpoolId
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (data.status === 'success') {
+                showToast(data.message, 'success');
+                bootstrap.Modal.getInstance(changeFilamentModal).hide();
+                // Dashboard aktualisieren
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                showFilamentError(true, data.message);
+            }
+        } catch (error) {
+            showFilamentError(true, 'Fehler beim Zuweisen der Spule');
+        } finally {
+            showFilamentLoading(false);
+        }
+    }
+    
+    async function unloadCurrentSpool() {
+        if (!currentPrinterId) return;
+        
+        if (!confirm('Spule wirklich entladen?')) return;
+        
+        try {
+            showFilamentLoading(true);
+            
+            const response = await fetch('/api/filament/assign-spool', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify({
+                    printer_id: currentPrinterId,
+                    spool_id: null
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (data.status === 'success') {
+                showToast('Spule entladen', 'success');
+                loadAvailableSpools(currentPrinterId); // Neu laden
+            } else {
+                showFilamentError(true, data.message);
+            }
+        } catch (error) {
+            showFilamentError(true, 'Fehler beim Entladen der Spule');
+        } finally {
+            showFilamentLoading(false);
+        }
+    }
+    
+    function showFilamentLoading(show) {
+        const overlay = document.getElementById('filamentModalLoading');
+        if (overlay) {
+            overlay.classList.toggle('d-none', !show);
+        }
+    }
+    
+    function showFilamentError(show, message = '') {
+        const errorDiv = document.getElementById('filamentModalError');
+        if (errorDiv) {
+            errorDiv.classList.toggle('d-none', !show);
+            if (show) {
+                document.getElementById('errorMessage').textContent = message;
+            }
+        }
+    }
+    
+    function resetFilamentModal() {
+        currentPrinterId = null;
+        selectedSpoolId = null;
+        availableSpools = [];
+        
+        document.getElementById('selectedPrinterName').textContent = '-';
+        document.getElementById('currentSpoolDisplay').innerHTML = '<i class="bi bi-info-circle"></i> Keine Spule geladen';
+        document.getElementById('availableSpoolsGrid').innerHTML = '';
+        document.getElementById('availableSpoolsCount').textContent = '-';
+        document.getElementById('spoolSearchFilter').value = '';
+        document.getElementById('materialTypeFilter').value = '';
+        document.getElementById('assignSpoolBtn').disabled = true;
+        document.getElementById('unloadSpoolBtn').disabled = true;
+        
+        showFilamentLoading(false);
+        showFilamentError(false);
+    }
+    
+    function showToast(message, type) {
+        const toastHtml = `
+            <div class="toast align-items-center text-white bg-${type} border-0" 
+                 role="alert" style="position: fixed; top: 20px; right: 20px; z-index: 9999;">
+                <div class="d-flex">
+                    <div class="toast-body">${message}</div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+                </div>
+            </div>
+        `;
+        
+        document.body.insertAdjacentHTML('beforeend', toastHtml);
+        const toast = document.querySelector('.toast:last-child');
+        const bsToast = new bootstrap.Toast(toast);
+        bsToast.show();
+        
+        setTimeout(() => toast.remove(), 5000);
+    }
+
+    // Make functions globally available
+    window.selectSpool = selectSpool;
+
     fetch('/api/dashboard/status').then(res => res.json()).then(data => updateDashboard(data));
     socket.on('status_update', data => updateDashboard(data));
     socket.on('reload_dashboard', () => location.reload());
@@ -531,19 +982,75 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
+
+// Trockner-Status laden
+async function loadDryingStatus() {
+    try {
+        const response = await fetch('/api/filament/drying-status');
+        const data = await response.json();
+        
+        const container = document.getElementById('dryingStatus');
+        if (!container) return;
+        
+        if (data.status === 'success' && data.active_sessions.length > 0) {
+            let html = '';
+            
+            data.active_sessions.slice(0, 3).forEach(session => {
+                const remainingHours = Math.floor(session.remaining_minutes / 60);
+                const remainingMins = session.remaining_minutes % 60;
+                
+                html += `
+                    <div class="d-flex justify-content-between align-items-center mb-2 p-2 rounded" 
+                         style="background-color: ${session.spool.color}20;">
+                        <div>
+                            <strong>${session.spool.short_id}</strong>
+                            <br><small class="text-muted">${session.temperature}°C</small>
+                        </div>
+                        <div class="text-end">
+                            <div class="small fw-bold ${session.is_overdue ? 'text-danger' : 'text-primary'}">
+                                ${session.is_overdue ? 'FERTIG!' : `${remainingHours}:${remainingMins.toString().padStart(2, '0')}`}
+                            </div>
+                            <div class="progress" style="width: 60px; height: 4px;">
+                                <div class="progress-bar bg-warning" style="width: ${session.progress_percentage}%"></div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            if (data.active_sessions.length > 3) {
+                html += `<small class="text-muted">...und ${data.active_sessions.length - 3} weitere</small>`;
+            }
+            
+            container.innerHTML = html;
+        } else {
+            container.innerHTML = `
+                <div class="text-center text-muted">
+                    <i class="bi bi-check-circle fs-3"></i>
+                    <p class="mb-0">Keine aktiven Trocknungen</p>
+                </div>
+            `;
+        }
+    } catch (error) {
+        const container = document.getElementById('dryingStatus');
+        if (container) {
+            container.innerHTML = `
+                <div class="text-danger">
+                    <i class="bi bi-exclamation-triangle"></i> 
+                    Fehler beim Laden
+                </div>
+            `;
+        }
+    }
+}
+
+// Dashboard-Init
+document.addEventListener('DOMContentLoaded', function() {
+    // Trockner-Widget laden
+    loadDryingStatus();
+    
+    // Alle 60 Sekunden aktualisieren
+    setInterval(loadDryingStatus, 60000);
+});
 </script>
 {% endblock %}
-                        title="Filament wechseln">
-                    <i class="bi bi-arrow-repeat"></i>
-                </button>
-            </div>`;
-        } else {
-             spoolInfo = `
-            <div class="d-flex justify-content-between card-info-row">
-                <span class="text-muted"><i>Keine Spule geladen</i></span>
-                <button class="btn btn-xs btn-outline-light" 
-                        data-bs-toggle="modal" 
-                        data-bs-target="#changeFilamentModal"
-                        data-printer-id="${printerData.id}"
-                        data-printer-name="${printerData.name}"
-                

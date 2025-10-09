@@ -1,0 +1,350 @@
+{% extends "base.html" %}
+
+{% block title %}Wartungsverlauf{% endblock %}
+
+{% block content %}
+<div class="main-header">
+    <h1><i class="bi bi-clock-history"></i> Wartungsverlauf</h1>
+    <div class="header-actions">
+        <button class="btn btn-outline-success" onclick="exportToCSV()">
+            <i class="bi bi-download"></i> CSV Export
+        </button>
+        <a href="{{ url_for('maintenance_new_bp.dashboard') }}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left"></i> Zurück
+        </a>
+    </div>
+</div>
+
+<!-- Filter -->
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="bi bi-funnel"></i> Filter</h5>
+    </div>
+    <div class="card-body">
+        <form method="GET" class="row g-3">
+            <div class="col-md-3">
+                <label class="form-label">Drucker</label>
+                <select name="printer_id" class="form-select" onchange="this.form.submit()">
+                    <option value="">Alle Drucker</option>
+                    {% for printer in printers %}
+                    <option value="{{ printer.id }}" {% if selected_printer == printer.id %}selected{% endif %}>
+                        {{ printer.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Zeitraum von</label>
+                <input type="date" name="date_from" class="form-control" value="{{ request.args.get('date_from', '') }}">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Zeitraum bis</label>
+                <input type="date" name="date_to" class="form-control" value="{{ request.args.get('date_to', '') }}">
+            </div>
+            <div class="col-md-3 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="bi bi-search"></i> Filtern
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Statistiken -->
+<div class="row g-4 mb-4">
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body text-center">
+                <h6 class="text-muted">Gesamte Wartungen</h6>
+                <h2 class="display-4">{{ executions | length }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body text-center">
+                <h6 class="text-muted">Durchschn. Dauer</h6>
+                <h2 class="display-4">
+                    {% set total_duration = executions | sum(attribute='actual_duration_min') %}
+                    {% if executions %}
+                        {{ (total_duration / executions|length) | round | int }} min
+                    {% else %}
+                        0 min
+                    {% endif %}
+                </h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body text-center">
+                <h6 class="text-muted">Gesamtkosten</h6>
+                <h2 class="display-4">
+                    {% set total_costs = executions | sum(attribute='total_cost') %}
+                    {{ "%.2f"|format(total_costs if total_costs else 0) }} €
+                </h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body text-center">
+                <h6 class="text-muted">Gewartete Drucker</h6>
+                <h2 class="display-4">
+                    {{ executions | map(attribute='printer_id') | unique | list | length }}
+                </h2>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Wartungstabelle -->
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0">Wartungsprotokolle</h5>
+    </div>
+    <div class="card-body">
+        {% if executions %}
+        <div class="table-responsive">
+            <table class="table table-hover align-middle" id="maintenanceTable">
+                <thead>
+                    <tr>
+                        <th>Datum & Zeit</th>
+                        <th>Drucker</th>
+                        <th>Aufgabe</th>
+                        <th>Durchgeführt von</th>
+                        <th>Dauer</th>
+                        <th>Kosten</th>
+                        <th>Status</th>
+                        <th>Aktionen</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for execution in executions %}
+                    <tr>
+                        <td>
+                            <strong>{{ execution.completed_at.strftime('%d.%m.%Y') }}</strong><br>
+                            <small class="text-muted">{{ execution.completed_at.strftime('%H:%M') }} Uhr</small>
+                        </td>
+                        <td>
+                            <a href="{{ url_for('maintenance_new_bp.printer_schedule', printer_id=execution.printer.id) }}">
+                                {{ execution.printer.name }}
+                            </a>
+                        </td>
+                        <td>{{ execution.task.title }}</td>
+                        <td>{{ execution.performed_by.username }}</td>
+                        <td>{{ execution.actual_duration_min }} min</td>
+                        <td>
+                            {% if execution.total_cost %}
+                                {{ "%.2f"|format(execution.total_cost) }} €
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if execution.issues_found %}
+                                <span class="badge bg-warning text-dark" title="Probleme gefunden">
+                                    <i class="bi bi-exclamation-triangle"></i>
+                                </span>
+                            {% else %}
+                                <span class="badge bg-success">
+                                    <i class="bi bi-check-lg"></i> OK
+                                </span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-info" 
+                                    data-bs-toggle="modal" 
+                                    data-bs-target="#detailModal{{ execution.id }}">
+                                <i class="bi bi-eye"></i> Details
+                            </button>
+                        </td>
+                    </tr>
+
+                    <!-- Detail Modal -->
+                    <div class="modal fade" id="detailModal{{ execution.id }}" tabindex="-1">
+                        <div class="modal-dialog modal-lg">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">
+                                        {{ execution.task.title }} - {{ execution.printer.name }}
+                                    </h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <!-- Basis-Informationen -->
+                                    <div class="row mb-4">
+                                        <div class="col-md-6">
+                                            <p><strong>Durchgeführt von:</strong> {{ execution.performed_by.username }}</p>
+                                            <p><strong>Datum:</strong> {{ execution.completed_at.strftime('%d.%m.%Y %H:%M') }}</p>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <p><strong>Start:</strong> {{ execution.started_at.strftime('%H:%M') }}</p>
+                                            <p><strong>Ende:</strong> {{ execution.completed_at.strftime('%H:%M') }}</p>
+                                            <p><strong>Dauer:</strong> {{ execution.actual_duration_min }} Minuten</p>
+                                        </div>
+                                    </div>
+
+                                    <!-- Kosten -->
+                                    {% if execution.total_cost %}
+                                    <div class="mb-4">
+                                        <h6><i class="bi bi-currency-euro"></i> Kosten</h6>
+                                        <div class="row">
+                                            <div class="col-md-4">
+                                                <small class="text-muted">Arbeitskosten</small>
+                                                <p>{{ "%.2f"|format(execution.labor_cost if execution.labor_cost else 0) }} €</p>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <small class="text-muted">Materialkosten</small>
+                                                <p>{{ "%.2f"|format(execution.parts_cost if execution.parts_cost else 0) }} €</p>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <small class="text-muted">Gesamt</small>
+                                                <p><strong>{{ "%.2f"|format(execution.total_cost) }} €</strong></p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {% endif %}
+
+                                    <!-- Checkliste -->
+                                    {% if execution.checklist_results %}
+                                    <div class="mb-4">
+                                        <h6><i class="bi bi-list-check"></i> Checkliste</h6>
+                                        <ul class="list-unstyled">
+                                            {% for item in execution.checklist_results %}
+                                            <li class="mb-2">
+                                                {% if item.completed %}
+                                                    <i class="bi bi-check-circle-fill text-success"></i>
+                                                {% else %}
+                                                    <i class="bi bi-x-circle-fill text-danger"></i>
+                                                {% endif %}
+                                                {{ item.item }}
+                                                {% if item.notes %}
+                                                    <br><small class="text-muted ms-4">→ {{ item.notes }}</small>
+                                                {% endif %}
+                                            </li>
+                                            {% endfor %}
+                                        </ul>
+                                    </div>
+                                    {% endif %}
+
+                                    <!-- Verbrauchte Materialien -->
+                                    {% if execution.used_consumables %}
+                                    <div class="mb-4">
+                                        <h6><i class="bi bi-box-seam"></i> Verbrauchte Materialien</h6>
+                                        <ul>
+                                            {% for uc in execution.used_consumables %}
+                                            <li>{{ uc.consumable.name }} - {{ uc.quantity_used }}x</li>
+                                            {% endfor %}
+                                        </ul>
+                                    </div>
+                                    {% endif %}
+
+                                    <!-- Probleme -->
+                                    {% if execution.issues_found %}
+                                    <div class="mb-4">
+                                        <h6><i class="bi bi-exclamation-triangle text-warning"></i> Gefundene Probleme</h6>
+                                        <div class="alert alert-warning">
+                                            {{ execution.issues_found }}
+                                        </div>
+                                    </div>
+                                    {% endif %}
+
+                                    <!-- Empfehlungen -->
+                                    {% if execution.recommendations %}
+                                    <div class="mb-4">
+                                        <h6><i class="bi bi-lightbulb text-info"></i> Empfehlungen</h6>
+                                        <div class="alert alert-info">
+                                            {{ execution.recommendations }}
+                                        </div>
+                                    </div>
+                                    {% endif %}
+
+                                    <!-- Notizen -->
+                                    {% if execution.notes %}
+                                    <div class="mb-4">
+                                        <h6><i class="bi bi-journal-text"></i> Zusätzliche Notizen</h6>
+                                        <p class="text-break">{{ execution.notes }}</p>
+                                    </div>
+                                    {% endif %}
+
+                                    <!-- Fotos -->
+                                    {% if execution.photos %}
+                                    <div>
+                                        <h6><i class="bi bi-camera"></i> Fotos</h6>
+                                        <div class="row g-2">
+                                            {% for photo in execution.photos %}
+                                            <div class="col-md-4">
+                                                <a href="{{ url_for('static', filename=photo.url) }}" target="_blank">
+                                                    <img src="{{ url_for('static', filename=photo.url) }}" 
+                                                         class="img-fluid rounded" 
+                                                         alt="{{ photo.caption }}">
+                                                </a>
+                                                {% if photo.caption %}
+                                                <small class="text-muted d-block mt-1">{{ photo.caption }}</small>
+                                                {% endif %}
+                                            </div>
+                                            {% endfor %}
+                                        </div>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Schließen</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="alert alert-info mb-0">
+            <i class="bi bi-info-circle-fill me-2"></i>
+            Keine Wartungsprotokolle für die gewählten Filter gefunden.
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function exportToCSV() {
+    const table = document.getElementById('maintenanceTable');
+    let csv = [];
+    
+    // Header
+    const headers = Array.from(table.querySelectorAll('thead th'))
+        .slice(0, -1) // Letzte Spalte (Aktionen) ausschließen
+        .map(th => th.textContent.trim());
+    csv.push(headers.join(';'));
+    
+    // Rows
+    table.querySelectorAll('tbody tr').forEach(row => {
+        const cells = Array.from(row.querySelectorAll('td'))
+            .slice(0, -1) // Letzte Spalte ausschließen
+            .map(td => {
+                // Bereinige Zeilenumbrüche
+                return td.textContent.trim().replace(/\n/g, ' ').replace(/\s+/g, ' ');
+            });
+        csv.push(cells.join(';'));
+    });
+    
+    // Download
+    const csvContent = csv.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    
+    link.setAttribute('href', url);
+    link.setAttribute('download', `wartungsverlauf_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+</script>
+{% endblock %}

@@ -1,0 +1,30 @@
+<div class="spool-item card mb-2" data-spool-id="{{ spool.id }}">
+    <div class="card-body p-2">
+        <div class="d-flex align-items-center">
+            <div class="material-color-indicator me-2" 
+                 style="width: 12px; height: 12px; border-radius: 50%; background-color: {{ spool.filament_type.color_hex }}; border: 1px solid #ccc;"></div>
+            <div class="flex-grow-1">
+                <div class="fw-bold small">{{ spool.short_id }}</div>
+                <div class="text-muted" style="font-size: 0.7rem;">{{ spool.filament_type.name[:15] }}{% if spool.filament_type.name|length > 15 %}...{% endif %}</div>
+            </div>
+            <div class="text-end">
+                <div class="small fw-bold">{{ spool.current_weight_g }}g</div>
+                <div class="progress" style="height: 3px; width: 40px;">
+                    <div class="progress-bar bg-success" style="width: {{ spool.remaining_percentage }}%"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Status-Badges -->
+        <div class="mt-1">
+            {% if spool.is_currently_drying %}
+                <span class="badge bg-warning text-dark" style="font-size: 0.6rem;">Trocknet</span>
+            {% endif %}
+            {% if spool.is_expired %}
+                <span class="badge bg-danger" style="font-size: 0.6rem;">Abgelaufen</span>
+            {% elif spool.is_expiring_soon %}
+                <span class="badge bg-warning text-dark" style="font-size: 0.6rem;">Läuft ab</span>
+            {% endif %}
+        </div>
+    </div>
+</div>

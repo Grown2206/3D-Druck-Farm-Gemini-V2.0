@@ -442,6 +442,46 @@ class FilamentType(db.Model):
         r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
         luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
         return luminance > 0.5
+    
+    def get_storage_requirements(self):
+        """Gibt Lageranforderungen als Dict zurück"""
+        return {
+            'temperature_min': self.storage_temperature_min,
+            'temperature_max': self.storage_temperature_max,
+            'humidity_max': self.storage_humidity_max,
+            'shelf_life_months': self.shelf_life_months
+        }
+
+    def get_drying_requirements(self):
+        """Gibt Trocknungsparameter zurück"""
+        return {
+            'temperature': self.drying_temperature or 50,
+            'duration_hours': self.drying_duration_hours or 6
+        }
+
+    def calculate_consumption_forecast(self, current_weight_g):
+        """Berechnet Verbrauchsprognose basierend auf historischem Durchschnitt"""
+        if not self.avg_consumption_g_per_hour or current_weight_g <= 0:
+            return None
+        
+        # Aktuelle Druckaktivitäten berücksichtigen
+        active_jobs = Job.query.filter(
+            Job.status.in_([JobStatus.PRINTING, JobStatus.QUEUED]),
+            Job.required_filament_type_id == self.id
+        ).count()
+        
+        if active_jobs == 0:
+            return {"days_remaining": "∞", "note": "Keine aktiven Drucke"}
+        
+        hours_remaining = current_weight_g / (self.avg_consumption_g_per_hour * active_jobs)
+        days_remaining = hours_remaining / 24
+        
+        return {
+            "days_remaining": round(days_remaining, 1),
+            "hours_remaining": round(hours_remaining, 1),
+            "active_jobs": active_jobs
+        }
+
 
 class FilamentSpool(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -458,6 +498,18 @@ class FilamentSpool(db.Model):
     drying_start_time = db.Column(db.DateTime, nullable=True)
     drying_temp = db.Column(db.Integer, nullable=True)
     drying_humidity = db.Column(db.Integer, nullable=True)
+    
+    # Neue Spalten aus Migration
+    storage_location = db.Column(db.String(100), nullable=True)
+    batch_number = db.Column(db.String(50), nullable=True)
+    manufacturing_date = db.Column(db.Date, nullable=True)
+    expiry_date = db.Column(db.Date, nullable=True)
+    drying_end_time = db.Column(db.DateTime, nullable=True)
+    drying_cycles_count = db.Column(db.Integer, nullable=True, server_default='0')
+    last_used_date = db.Column(db.Date, nullable=True)
+    qr_code = db.Column(db.String(50), nullable=True)
+    weight_measurements = db.Column(JSON, nullable=True)
+    usage_history = db.Column(JSON, nullable=True)
     
     def __init__(self, *args, **kwargs):
         super(FilamentSpool, self).__init__(*args, **kwargs)
@@ -476,6 +528,86 @@ class FilamentSpool(db.Model):
         if self.current_weight_g is not None and self.initial_weight_g and self.initial_weight_g > 0:
             return max(0, min(100, round((self.current_weight_g / self.initial_weight_g) * 100)))
         return 0
+
+    @property
+    def is_expired(self):
+        """Prüft ob die Spule abgelaufen ist"""
+        if not self.expiry_date:
+            return False
+        return self.expiry_date < datetime.date.today()
+
+    @property
+    def is_expiring_soon(self):
+        """Prüft ob die Spule bald abläuft (30 Tage)"""
+        if not self.expiry_date:
+            return False
+        days_until_expiry = (self.expiry_date - datetime.date.today()).days
+        return 0 < days_until_expiry <= 30
+
+    @property
+    def needs_drying(self):
+        """Prüft ob die Spule getrocknet werden sollte"""
+        if not self.last_used_date:
+            return True
+        days_since_use = (datetime.date.today() - self.last_used_date).days
+        return days_since_use > 7
+
+    @property
+    def current_drying_session(self):
+        """Temporär vereinfacht - gibt None zurück"""
+        return None
+
+    @property
+    def is_currently_drying(self):
+        """Prüft ob die Spule gerade getrocknet wird"""
+        return self.is_drying
+
+
+def start_drying_session(self, temperature, duration_hours, user_id, notes=None):
+        """Startet eine neue Trocknungssession"""
+        # Update Spool Status
+        self.is_drying = True
+        self.drying_start_time = datetime.datetime.utcnow()
+        self.drying_temp = temperature
+        self.drying_end_time = datetime.datetime.utcnow() + datetime.timedelta(hours=duration_hours)
+        
+        # Simuliere Session-Objekt
+        class MockSession:
+            def __init__(self, spool_id, temp, duration, user_id, notes):
+                self.id = 1
+                self.spool_id = spool_id
+                self.temperature = temp
+                self.duration_hours = duration
+                self.user_id = user_id
+                self.notes = notes
+                self.start_time = datetime.datetime.utcnow()
+                self.end_time = self.start_time + datetime.timedelta(hours=duration)
+        
+        return MockSession(self.id, temperature, duration_hours, user_id, notes)
+
+def complete_drying_session(self):
+        """Beendet die aktuelle Trocknungssession"""
+        self.is_drying = False
+        self.drying_start_time = None
+        self.drying_temp = None
+        self.drying_end_time = None
+        self.drying_cycles_count = (self.drying_cycles_count or 0) + 1
+        return True
+
+def generate_qr_code_data(self):
+        """Generiert QR-Code Daten für die Spule"""
+        if not self.qr_code:
+            self.qr_code = f"SPOOL-{self.short_id}-{self.id}"
+        
+        return {
+            'type': 'filament_spool',
+            'id': self.id,
+            'short_id': self.short_id,
+            'qr_code': self.qr_code,
+            'material': f"{self.filament_type.manufacturer} {self.filament_type.name}",
+            'color': self.filament_type.color_hex,
+            'weight': self.current_weight_g
+        }
 
 class SystemSetting(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -676,3 +808,143 @@ class LayoutItem(db.Model):
 
     def __repr__(self):
         return f'<LayoutItem {self.name}>'
+    
+    
+# models.py - AM ENDE HINZUFÜGEN
+
+class MaintenanceStatus(str, enum.Enum):
+    SCHEDULED = 'Geplant'
+    IN_PROGRESS = 'In Bearbeitung'
+    COMPLETED = 'Abgeschlossen'
+    OVERDUE = 'Überfällig'
+    CANCELLED = 'Abgebrochen'
+
+class MaintenancePriority(str, enum.Enum):
+    LOW = 'Niedrig'
+    MEDIUM = 'Mittel'
+    HIGH = 'Hoch'
+    CRITICAL = 'Kritisch'
+
+class MaintenanceInterval(str, enum.Enum):
+    HOURS = 'Druckstunden'
+    DAYS = 'Tage'
+    WEEKS = 'Wochen'
+    MONTHS = 'Monate'
+    MANUAL = 'Manuell'
+
+task_printer_assignment = db.Table('task_printer_assignment',
+    db.Column('task_id', db.Integer, db.ForeignKey('maintenance_task_new.id'), primary_key=True),
+    db.Column('printer_id', db.Integer, db.ForeignKey('printer.id'), primary_key=True)
+)
+
+class MaintenanceTaskNew(db.Model):
+    __tablename__ = 'maintenance_task_new'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(150), nullable=False, unique=True)
+    description = db.Column(db.Text, nullable=True)
+    category = db.Column(RobustEnum(MaintenanceTaskCategory), nullable=False)
+    interval_type = db.Column(RobustEnum(MaintenanceInterval), default=MaintenanceInterval.MANUAL)
+    interval_value = db.Column(db.Integer, nullable=True)
+    priority = db.Column(RobustEnum(MaintenancePriority), default=MaintenancePriority.MEDIUM)
+    estimated_duration_min = db.Column(db.Integer, nullable=True)
+    checklist_items = db.Column(JSON, nullable=True)
+    instruction_url = db.Column(db.String(255), nullable=True)
+    instruction_pdf = db.Column(db.String(255), nullable=True)
+    video_tutorial_url = db.Column(db.String(255), nullable=True)
+    safety_warnings = db.Column(JSON, nullable=True)
+    applicable_to_all = db.Column(db.Boolean, default=True)
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    
+    applicable_printers = db.relationship('Printer', secondary=task_printer_assignment, backref='assigned_maintenance_tasks')
+    required_consumables = db.relationship('TaskConsumableNew', back_populates='task', cascade='all, delete-orphan')
+    schedules = db.relationship('MaintenanceScheduleNew', back_populates='task', cascade='all, delete-orphan')
+    executions = db.relationship('MaintenanceExecutionNew', back_populates='task')
+
+class TaskConsumableNew(db.Model):
+    __tablename__ = 'task_consumable_new'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    task_id = db.Column(db.Integer, db.ForeignKey('maintenance_task_new.id'), nullable=False)
+    consumable_id = db.Column(db.Integer, db.ForeignKey('consumable.id'), nullable=False)
+    quantity = db.Column(db.Integer, default=1)
+    
+    task = db.relationship('MaintenanceTaskNew', back_populates='required_consumables')
+    consumable = db.relationship('Consumable')
+
+class MaintenanceScheduleNew(db.Model):
+    __tablename__ = 'maintenance_schedule_new'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    task_id = db.Column(db.Integer, db.ForeignKey('maintenance_task_new.id'), nullable=False)
+    printer_id = db.Column(db.Integer, db.ForeignKey('printer.id'), nullable=False)
+    scheduled_date = db.Column(db.DateTime, nullable=False)
+    due_date = db.Column(db.DateTime, nullable=True)
+    status = db.Column(RobustEnum(MaintenanceStatus), default=MaintenanceStatus.SCHEDULED)
+    priority = db.Column(RobustEnum(MaintenancePriority), nullable=True)
+    triggered_by = db.Column(db.String(50), nullable=True)
+    trigger_value = db.Column(db.Float, nullable=True)
+    assigned_to_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    notes = db.Column(db.Text, nullable=True)
+    
+    task = db.relationship('MaintenanceTaskNew', back_populates='schedules')
+    printer = db.relationship('Printer')
+    assigned_to = db.relationship('User')
+    execution = db.relationship('MaintenanceExecutionNew', back_populates='schedule', uselist=False)
+
+class MaintenanceExecutionNew(db.Model):
+    __tablename__ = 'maintenance_execution_new'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    schedule_id = db.Column(db.Integer, db.ForeignKey('maintenance_schedule_new.id'), nullable=True)
+    task_id = db.Column(db.Integer, db.ForeignKey('maintenance_task_new.id'), nullable=False)
+    printer_id = db.Column(db.Integer, db.ForeignKey('printer.id'), nullable=False)
+    performed_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    started_at = db.Column(db.DateTime, nullable=False)
+    completed_at = db.Column(db.DateTime, nullable=True)
+    actual_duration_min = db.Column(db.Integer, nullable=True)
+    checklist_results = db.Column(JSON, nullable=True)
+    issues_found = db.Column(db.Text, nullable=True)
+    recommendations = db.Column(db.Text, nullable=True)
+    next_maintenance_recommended = db.Column(db.Date, nullable=True)
+    labor_cost = db.Column(db.Float, nullable=True)
+    parts_cost = db.Column(db.Float, nullable=True)
+    total_cost = db.Column(db.Float, nullable=True)
+    notes = db.Column(db.Text, nullable=True)
+    parts_ordered = db.Column(JSON, nullable=True)
+    
+    schedule = db.relationship('MaintenanceScheduleNew', back_populates='execution')
+    task = db.relationship('MaintenanceTaskNew', back_populates='executions')
+    printer = db.relationship('Printer')
+    performed_by = db.relationship('User')
+    photos = db.relationship('MaintenancePhotoNew', back_populates='execution', cascade='all, delete-orphan')
+    used_consumables = db.relationship('ExecutionConsumableNew', back_populates='execution', cascade='all, delete-orphan')
+
+class ExecutionConsumableNew(db.Model):
+    __tablename__ = 'execution_consumable_new'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    execution_id = db.Column(db.Integer, db.ForeignKey('maintenance_execution_new.id'), nullable=False)
+    consumable_id = db.Column(db.Integer, db.ForeignKey('consumable.id'), nullable=False)
+    quantity_used = db.Column(db.Integer, default=1)
+    
+    execution = db.relationship('MaintenanceExecutionNew', back_populates='used_consumables')
+    consumable = db.relationship('Consumable')
+
+class MaintenancePhotoNew(db.Model):
+    __tablename__ = 'maintenance_photo_new'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    execution_id = db.Column(db.Integer, db.ForeignKey('maintenance_execution_new.id'), nullable=False)
+    filename = db.Column(db.String(255), nullable=False)
+    caption = db.Column(db.String(255), nullable=True)
+    uploaded_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    
+    execution = db.relationship('MaintenanceExecutionNew', back_populates='photos')
+    
+    @property
+    def url(self):
+        return f'uploads/maintenance_photos/{self.filename}'

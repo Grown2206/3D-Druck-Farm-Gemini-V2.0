@@ -1,0 +1,347 @@
+{% extends "base.html" %}
+
+{% block title %}Wartungsaufgaben verwalten{% endblock %}
+
+{% block content %}
+<div class="main-header">
+    <h1><i class="bi bi-card-checklist"></i> Wartungsaufgaben verwalten</h1>
+    <div class="header-actions">
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addTaskModal">
+            <i class="bi bi-plus-lg"></i> Neue Aufgabe
+        </button>
+        <a href="{{ url_for('maintenance_new_bp.dashboard') }}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left"></i> Zurück
+        </a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        {% if tasks %}
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th>Aufgabe</th>
+                        <th>Kategorie</th>
+                        <th>Intervall</th>
+                        <th>Priorität</th>
+                        <th>Dauer</th>
+                        <th>Drucker</th>
+                        <th>Status</th>
+                        <th>Aktionen</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for task in tasks %}
+                    <tr>
+                        <td>
+                            <strong>{{ task.title }}</strong>
+                            {% if task.description %}
+                            <br><small class="text-muted">{{ task.description[:60] }}...</small>
+                            {% endif %}
+                        </td>
+                        <td><span class="badge bg-secondary">{{ task.category.value }}</span></td>
+                        <td>
+                            {% if task.interval_type.name == 'MANUAL' %}
+                                <span class="text-muted">Manuell</span>
+                            {% else %}
+                                {{ task.interval_value }} {{ task.interval_type.value }}
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge 
+                                {% if task.priority.name == 'CRITICAL' %}bg-danger
+                                {% elif task.priority.name == 'HIGH' %}bg-warning text-dark
+                                {% elif task.priority.name == 'MEDIUM' %}bg-info
+                                {% else %}bg-secondary{% endif %}">
+                                {{ task.priority.value }}
+                            </span>
+                        </td>
+                        <td>
+                            {% if task.estimated_duration_min %}
+                                ~{{ task.estimated_duration_min }} min
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if task.applicable_to_all %}
+                                <span class="text-muted">Alle Drucker</span>
+                            {% else %}
+                                {{ task.applicable_printers | length }} Drucker
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if task.is_active %}
+                                <i class="bi bi-check-circle-fill text-success" title="Aktiv"></i>
+                            {% else %}
+                                <i class="bi bi-x-circle-fill text-secondary" title="Inaktiv"></i>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="btn-group" role="group">
+                                <button class="btn btn-sm btn-outline-info" 
+                                        data-bs-toggle="modal" 
+                                        data-bs-target="#viewTaskModal{{ task.id }}"
+                                        title="Details">
+                                    <i class="bi bi-eye"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-primary" 
+                                        onclick="editTask({{ task.id }})"
+                                        title="Bearbeiten">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#confirmDeleteModal"
+                                        data-item-type="Wartungsaufgabe"
+                                        data-item-name="{{ task.title }}"
+                                        data-form-action="{{ url_for('maintenance_new_bp.delete_task', task_id=task.id) }}"
+                                        title="Löschen">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+
+                    <!-- Details Modal -->
+                    <div class="modal fade" id="viewTaskModal{{ task.id }}" tabindex="-1">
+                        <div class="modal-dialog modal-lg">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">{{ task.title }}</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                </div>
+                                <div class="modal-body">
+                                    {% if task.description %}
+                                    <h6>Beschreibung</h6>
+                                    <p>{{ task.description }}</p>
+                                    {% endif %}
+
+                                    {% if task.checklist_items %}
+                                    <h6 class="mt-3">Checkliste</h6>
+                                    <ul>
+                                        {% for item in task.checklist_items %}
+                                        <li>{{ item }}</li>
+                                        {% endfor %}
+                                    </ul>
+                                    {% endif %}
+
+                                    {% if task.safety_warnings %}
+                                    <h6 class="mt-3"><i class="bi bi-exclamation-triangle text-warning"></i> Sicherheitshinweise</h6>
+                                    <ul class="text-danger">
+                                        {% for warning in task.safety_warnings %}
+                                        <li>{{ warning }}</li>
+                                        {% endfor %}
+                                    </ul>
+                                    {% endif %}
+
+                                    {% if task.required_consumables %}
+                                    <h6 class="mt-3">Benötigte Materialien</h6>
+                                    <ul>
+                                        {% for tc in task.required_consumables %}
+                                        <li>{{ tc.consumable.name }} ({{ tc.quantity }}x)</li>
+                                        {% endfor %}
+                                    </ul>
+                                    {% endif %}
+
+                                    {% if task.instruction_url or task.video_tutorial_url %}
+                                    <h6 class="mt-3">Anleitungen</h6>
+                                    {% if task.instruction_url %}
+                                    <a href="{{ task.instruction_url }}" target="_blank" class="btn btn-sm btn-outline-info me-2">
+                                        <i class="bi bi-file-text"></i> Dokumentation
+                                    </a>
+                                    {% endif %}
+                                    {% if task.video_tutorial_url %}
+                                    <a href="{{ task.video_tutorial_url }}" target="_blank" class="btn btn-sm btn-outline-danger">
+                                        <i class="bi bi-play-btn"></i> Video-Tutorial
+                                    </a>
+                                    {% endif %}
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="alert alert-info mb-0">
+            <i class="bi bi-info-circle-fill me-2"></i>
+            Noch keine Wartungsaufgaben definiert. Erstellen Sie Ihre erste Aufgabe!
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Add Task Modal -->
+<div class="modal fade" id="addTaskModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Neue Wartungsaufgabe erstellen</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('maintenance_new_bp.add_task') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-8">
+                            <label class="form-label">Titel*</label>
+                            <input type="text" name="title" class="form-control" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Kategorie*</label>
+                            <select name="category" class="form-select" required>
+                                {% for cat in categories %}
+                                <option value="{{ cat.name }}">{{ cat.value }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label">Beschreibung</label>
+                            <textarea name="description" class="form-control" rows="3"></textarea>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label">Intervall-Typ</label>
+                            <select name="interval_type" class="form-select" id="intervalType">
+                                {% for interval in intervals %}
+                                <option value="{{ interval.name }}">{{ interval.value }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Intervall-Wert</label>
+                            <input type="number" name="interval_value" class="form-control" id="intervalValue" placeholder="z.B. 200">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Priorität</label>
+                            <select name="priority" class="form-select">
+                                {% for prio in priorities %}
+                                <option value="{{ prio.name }}" {% if prio.name == 'MEDIUM' %}selected{% endif %}>{{ prio.value }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Geschätzte Dauer (Minuten)</label>
+                            <input type="number" name="estimated_duration_min" class="form-control" placeholder="z.B. 30">
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label">Checkliste (eine Zeile pro Punkt)</label>
+                            <textarea name="checklist_items" class="form-control" rows="4" placeholder="Riemen spannen&#10;Schrauben prüfen&#10;Schmieren"></textarea>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label"><i class="bi bi-exclamation-triangle text-warning"></i> Sicherheitshinweise (eine Zeile pro Punkt)</label>
+                            <textarea name="safety_warnings" class="form-control" rows="3" placeholder="Netzkabel ziehen&#10;Heizbett abkühlen lassen"></textarea>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Anleitungs-URL</label>
+                            <input type="url" name="instruction_url" class="form-control" placeholder="https://...">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Video-Tutorial URL</label>
+                            <input type="url" name="video_tutorial_url" class="form-control" placeholder="https://youtube.com/...">
+                        </div>
+
+                        <div class="col-12">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="applicable_to_all" id="applicableToAll" checked>
+                                <label class="form-check-label" for="applicableToAll">
+                                    Für alle Drucker anwendbar
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="col-12" id="printerSelection" style="display: none;">
+                            <label class="form-label">Anwendbar auf folgende Drucker</label>
+                            <div class="row">
+                                {% for printer in printers %}
+                                <div class="col-md-4">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="printer_ids" value="{{ printer.id }}" id="printer{{ printer.id }}">
+                                        <label class="form-check-label" for="printer{{ printer.id }}">
+                                            {{ printer.name }}
+                                        </label>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+
+                        <div class="col-12">
+                            <h6>Benötigte Verbrauchsmaterialien</h6>
+                            <div id="consumablesContainer">
+                                <div class="row g-2 mb-2 consumable-row">
+                                    <div class="col-md-8">
+                                        <select name="consumable_ids[]" class="form-select">
+                                            <option value="">-- Material auswählen --</option>
+                                            {% for cons in consumables %}
+                                            <option value="{{ cons.id }}">{{ cons.name }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <input type="number" name="consumable_quantities[]" class="form-control" placeholder="Menge" min="1" value="1">
+                                    </div>
+                                    <div class="col-md-1">
+                                        <button type="button" class="btn btn-outline-danger w-100" onclick="removeConsumableRow(this)">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="addConsumableRow()">
+                                <i class="bi bi-plus-lg"></i> Weiteres Material
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                    <button type="submit" class="btn btn-primary">Aufgabe erstellen</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Intervall-Typ Toggle
+document.getElementById('intervalType').addEventListener('change', function() {
+    const intervalValue = document.getElementById('intervalValue');
+    intervalValue.disabled = (this.value === 'MANUAL');
+    if (intervalValue.disabled) intervalValue.value = '';
+});
+
+// Drucker-Auswahl Toggle
+document.getElementById('applicableToAll').addEventListener('change', function() {
+    document.getElementById('printerSelection').style.display = this.checked ? 'none' : 'block';
+});
+
+// Dynamische Verbrauchsmaterial-Zeilen
+function addConsumableRow() {
+    const container = document.getElementById('consumablesContainer');
+    const firstRow = container.querySelector('.consumable-row');
+    const newRow = firstRow.cloneNode(true);
+    newRow.querySelectorAll('select, input').forEach(el => el.value = '');
+    container.appendChild(newRow);
+}
+
+function removeConsumableRow(btn) {
+    const container = document.getElementById('consumablesContainer');
+    if (container.querySelectorAll('.consumable-row').length > 1) {
+        btn.closest('.consumable-row').remove();
+    }
+}
+</script>
+{% endblock %}

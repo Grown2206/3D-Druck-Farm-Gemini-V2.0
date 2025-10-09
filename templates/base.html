@@ -39,8 +39,9 @@
                 <li><a href="{{ url_for('jobs_bp.archive_list') }}" class="nav-link text-white"><i class="bi bi-archive-fill me-2"></i><span class="sidebar-text">Archiv</span></a></li>
                 <li><a href="{{ url_for('printers_bp.list_printers') }}" class="nav-link text-white"><img src="{{ url_for('static', filename='3d-printer-icon.png') }}" alt="Drucker" class="sidebar-icon me-2"><span class="sidebar-text">Drucker</span></a></li>
                 <li><a href="{{ url_for('materials_bp.list_filaments') }}" class="nav-link text-white"><i class="bi bi-disc me-2"></i><span class="sidebar-text">Filament</span></a></li>
-                <li><a href="{{ url_for('materials_bp.dryer_view') }}" class="nav-link text-white"><i class="bi bi-thermometer-half me-2"></i><span class="sidebar-text">Filament-Trockner</span></a></li>
-                
+                <li><a href="{{ url_for('materials_bp.dryer_dashboard') }}" class="nav-link text-white"><i class="bi bi-thermometer-half me-2"></i><span class="sidebar-text">Filament-Trockner</span></a></li>
+                <li><a href="{{ url_for('materials_bp.consumption_analytics') }}" class="nav-link text-white"><i class="bi bi-graph-up me-2"></i><span class="sidebar-text">Verbrauchsprognose</span></a></li>
+                <li><a href="{{ url_for('materials_bp.storage_management') }}" class="nav-link text-white"><i class="bi bi-geo-alt me-2"></i><span class="sidebar-text">Lagerort-Verwaltung</span></a></li>
                 <li><a href="{{ url_for('slicer_bp.slicer_index') }}" class="nav-link text-white"><i class="bi bi-layers me-2"></i><span class="sidebar-text">Slicer</span></a></li>
 
                 <li class="nav-label sidebar-text mt-3"><small>VERWALTUNG</small></li>
@@ -56,6 +57,16 @@
                         <span class="sidebar-text">Verbrauchsmaterial</span>
                     </a>
                 </li>
+                <li class="nav-item" role="presentation">
+                    <a class="nav-link text-white" href="{{ url_for('maintenance_new_bp.dashboard') }}">
+                        <i class="bi bi-tools me-2"></i>
+                        <span class="sidebar-text">Wartung V2</span>
+                    </a>
+                </li>
+                
+                
+                
+                
                 
                 <!-- Wartung mit Dropdown -->
                 <li class="nav-item">

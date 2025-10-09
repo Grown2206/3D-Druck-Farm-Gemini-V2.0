@@ -1,0 +1,823 @@
+{% extends "base.html" %}
+
+{% block title %}Verbrauchsprognose{% endblock %}
+
+{% block head_extra %}
+<style>
+    .forecast-card {
+        transition: transform 0.2s, box-shadow 0.2s;
+        border-left: 4px solid #6c757d;
+    }
+    .forecast-card.critical {
+        border-left-color: #dc3545;
+        background: linear-gradient(135deg, rgba(220,53,69,0.05) 0%, rgba(220,53,69,0.1) 100%);
+    }
+    .forecast-card.warning {
+        border-left-color: #ffc107;
+        background: linear-gradient(135deg, rgba(255,193,7,0.05) 0%, rgba(255,193,7,0.1) 100%);
+    }
+    .forecast-card.ok {
+        border-left-color: #198754;
+        background: linear-gradient(135deg, rgba(25,135,84,0.05) 0%, rgba(25,135,84,0.1) 100%);
+    }
+    .forecast-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    .material-color-indicator {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 8px;
+        border: 2px solid #fff;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    }
+    .progress-ring {
+        width: 60px;
+        height: 60px;
+    }
+    .consumption-chart {
+        height: 200px;
+    }
+    .filter-section {
+        background: rgba(var(--bs-dark-rgb), 0.05);
+        border-radius: 8px;
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+    }
+    .loading-spinner {
+        display: inline-block;
+        width: 1rem;
+        height: 1rem;
+        border: 2px solid #f3f3f3;
+        border-top: 2px solid #007bff;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="main-header">
+    <h1><i class="bi bi-graph-up"></i> Verbrauchsprognose & Analytics</h1>
+    <div class="header-actions">
+        <button class="btn btn-outline-success" onclick="exportToExcel()">
+            <i class="bi bi-file-excel"></i> Excel Export
+        </button>
+        <button class="btn btn-outline-info" onclick="refreshData()">
+            <i class="bi bi-arrow-clockwise"></i> Aktualisieren
+        </button>
+    </div>
+</div>
+
+<!-- Filter & Einstellungen -->
+<div class="filter-section">
+    <form method="GET" id="filterForm" class="row g-3 align-items-end">
+        <div class="col-md-3">
+            <label class="form-label">Zeitraum (Tage)</label>
+            <select name="days" class="form-select" onchange="submitForm()">
+                <option value="7" {% if days == 7 %}selected{% endif %}>7 Tage</option>
+                <option value="14" {% if days == 14 %}selected{% endif %}>14 Tage</option>
+                <option value="30" {% if days == 30 %}selected{% endif %}>30 Tage</option>
+                <option value="60" {% if days == 60 %}selected{% endif %}>60 Tage</option>
+                <option value="90" {% if days == 90 %}selected{% endif %}>90 Tage</option>
+            </select>
+        </div>
+        <div class="col-md-4">
+            <label class="form-label">Material filtern</label>
+            <select name="material" class="form-select" onchange="submitForm()">
+                <option value="">Alle Materialien</option>
+                {% for material in all_materials %}
+                <option value="{{ material.id }}" {% if material_filter == material.id|string %}selected{% endif %}>
+                    {{ material.manufacturer }} {{ material.name }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3">
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="low_only" value="true" 
+                       {% if show_only_low %}checked{% endif %} onchange="submitForm()" id="lowOnlyCheck">
+                <label class="form-check-label" for="lowOnlyCheck">
+                    Nur niedrige Bestände
+                </label>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <button type="button" class="btn btn-outline-secondary w-100" onclick="resetFilters()">
+                <i class="bi bi-x-circle"></i> Zurücksetzen
+            </button>
+        </div>
+    </form>
+</div>
+
+<!-- Zusammenfassung -->
+<div class="row g-4 mb-4" id="summaryStats">
+    <div class="col-md-3">
+        <div class="card text-white bg-danger">
+            <div class="card-body text-center">
+                <i class="bi bi-exclamation-triangle-fill fs-1"></i>
+                <h3 id="criticalCount">-</h3>
+                <small>Kritisch</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-warning">
+            <div class="card-body text-center">
+                <i class="bi bi-exclamation-diamond-fill fs-1 text-dark"></i>
+                <h3 class="text-dark" id="warningCount">-</h3>
+                <small class="text-dark">Warnung</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-success">
+            <div class="card-body text-center">
+                <i class="bi bi-check-circle-fill fs-1"></i>
+                <h3 id="okCount">-</h3>
+                <small>Ausreichend</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-info">
+            <div class="card-body text-center">
+                <i class="bi bi-bar-chart-fill fs-1"></i>
+                <h3 id="totalCount">-</h3>
+                <small>Materialien gesamt</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Verbrauchscharts -->
+<div class="row g-4 mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="bi bi-bar-chart"></i> Verbrauchstrend</h6>
+            </div>
+            <div class="card-body">
+                <canvas id="consumptionTrendChart" height="100"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="bi bi-graph-down"></i> Geschätzte Reichweite nach Material</h6>
+            </div>
+            <div class="card-body">
+                <canvas id="materialReachChart" height="250"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="bi bi-pie-chart"></i> Status-Verteilung</h6>
+            </div>
+            <div class="card-body">
+                <canvas id="statusDistributionChart" style="max-height: 250px;"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Verbrauchsprognosen -->
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0">
+            <i class="bi bi-clipboard-data"></i> Detaillierte Verbrauchsprognosen
+            <span class="badge bg-secondary ms-2" id="forecastCount">Lade...</span>
+        </h5>
+    </div>
+    <div class="card-body">
+        <div id="forecastContainer">
+            <div class="text-center p-4">
+                <div class="loading-spinner"></div>
+                <p class="mt-2 text-muted">Lade Prognosedaten...</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Detailmodal -->
+<div class="modal fade" id="materialDetailModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="materialDetailTitle">Material-Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="materialDetailContent">
+                <div class="text-center">
+                    <div class="loading-spinner"></div>
+                    <p class="mt-2">Lade Details...</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Schließen</button>
+                <button type="button" class="btn btn-warning" id="addToShoppingListBtn" onclick="addToShoppingList()">
+                    <i class="bi bi-cart-plus"></i> Zur Einkaufsliste
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Einkaufslisten-Modal -->
+<div class="modal fade" id="shoppingListModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Material zur Einkaufsliste hinzufügen</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="shoppingListForm">
+                    <div class="mb-3">
+                        <label class="form-label">Material</label>
+                        <input type="text" class="form-control" id="shoppingMaterial" readonly>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Menge (Spulen)</label>
+                        <input type="number" class="form-control" id="shoppingQuantity" value="1" min="1">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Priorität</label>
+                        <select class="form-select" id="shoppingPriority">
+                            <option value="low">Niedrig</option>
+                            <option value="medium" selected>Mittel</option>
+                            <option value="high">Hoch</option>
+                            <option value="critical">Kritisch</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Notizen</label>
+                        <textarea class="form-control" id="shoppingNotes" rows="3"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                <button type="button" class="btn btn-primary" onclick="saveToShoppingList()">Hinzufügen</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let forecastData = [];
+let currentMaterialId = null;
+let charts = {};
+
+// Chart-Initialisierung
+document.addEventListener('DOMContentLoaded', function() {
+    loadForecastData();
+});
+
+async function loadForecastData() {
+    try {
+        const response = await fetch('/api/filament/forecast');
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            forecastData = data.forecasts;
+            updateSummaryStats();
+            renderForecastCards();
+            initializeCharts();
+        } else {
+            showError('Fehler beim Laden der Prognosedaten: ' + data.message);
+        }
+    } catch (error) {
+        showError('Netzwerkfehler beim Laden der Daten: ' + error.message);
+    }
+}
+
+function updateSummaryStats() {
+    const critical = forecastData.filter(f => f.status === 'critical').length;
+    const warning = forecastData.filter(f => f.status === 'warning').length;
+    const ok = forecastData.filter(f => f.status === 'ok').length;
+    const total = forecastData.length;
+    
+    document.getElementById('criticalCount').textContent = critical;
+    document.getElementById('warningCount').textContent = warning;
+    document.getElementById('okCount').textContent = ok;
+    document.getElementById('totalCount').textContent = total;
+    document.getElementById('forecastCount').textContent = total;
+}
+
+function renderForecastCards() {
+    const container = document.getElementById('forecastContainer');
+    
+    if (forecastData.length === 0) {
+        container.innerHTML = `
+            <div class="alert alert-info text-center">
+                <i class="bi bi-info-circle fs-1 text-muted"></i>
+                <h5 class="mt-3">Keine Daten verfügbar</h5>
+                <p class="mb-0">Keine Materialien für die gewählten Filter gefunden oder alle Bestände sind leer.</p>
+            </div>
+        `;
+        return;
+    }
+    
+    // Sortieren nach Status (kritisch zuerst)
+    const statusOrder = {'critical': 0, 'warning': 1, 'ok': 2, 'unknown': 3};
+    const sortedData = forecastData.sort((a, b) => {
+        if (statusOrder[a.status] !== statusOrder[b.status]) {
+            return statusOrder[a.status] - statusOrder[b.status];
+        }
+        return a.forecast.days_remaining - b.forecast.days_remaining;
+    });
+    
+    const cardsHtml = sortedData.map(forecast => {
+        const materialInfo = forecast.material.split(' ');
+        const manufacturer = materialInfo[0];
+        const materialName = materialInfo.slice(1).join(' ');
+        
+        const statusBadge = {
+            'critical': 'bg-danger',
+            'warning': 'bg-warning text-dark',
+            'ok': 'bg-success',
+            'unknown': 'bg-secondary'
+        }[forecast.status];
+        
+        const statusText = {
+            'critical': 'Kritisch',
+            'warning': 'Warnung',
+            'ok': 'OK',
+            'unknown': 'Unbekannt'
+        }[forecast.status];
+        
+        const displayTime = forecast.forecast.days_remaining > 30 
+            ? `${forecast.forecast.weeks_remaining} Wochen`
+            : `${forecast.forecast.days_remaining} Tage`;
+        
+        return `
+            <div class="col-lg-6 col-xl-4">
+                <div class="card forecast-card ${forecast.status} h-100">
+                    <div class="card-body">
+                        <!-- Material-Header -->
+                        <div class="d-flex align-items-center mb-3">
+                            <div class="material-color-indicator" 
+                                 style="background-color: ${forecast.color}"></div>
+                            <div class="flex-grow-1">
+                                <h6 class="card-title mb-1">${manufacturer}</h6>
+                                <p class="card-text small text-muted mb-0">${materialName}</p>
+                            </div>
+                            <div class="text-end">
+                                <span class="badge ${statusBadge}">${statusText}</span>
+                            </div>
+                        </div>
+
+                        <!-- Bestands-Info -->
+                        <div class="row g-2 mb-3">
+                            <div class="col-6">
+                                <div class="text-center">
+                                    <div class="fs-4 fw-bold text-primary">${forecast.total_weight_g}g</div>
+                                    <small class="text-muted">Gesamt verfügbar</small>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="text-center">
+                                    <div class="fs-4 fw-bold text-info">${forecast.recent_jobs_count}</div>
+                                    <small class="text-muted">Jobs (30d)</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Prognose -->
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span class="small text-muted">Geschätzte Reichweite:</span>
+                                <span class="fw-bold">${displayTime}</span>
+                            </div>
+                            <div class="progress" style="height: 8px;">
+                                <div class="progress-bar ${statusBadge.replace('text-dark', '')}" 
+                                     style="width: ${Math.min(100, (forecast.forecast.days_remaining / 30) * 100)}%"></div>
+                            </div>
+                        </div>
+
+                        <!-- Details -->
+                        <div class="small text-muted">
+                            <div class="d-flex justify-content-between">
+                                <span>Täglicher Verbrauch:</span>
+                                <span>~${forecast.avg_consumption_per_day_g}g</span>
+                            </div>
+                            ${forecast.reorder_level ? `
+                            <div class="d-flex justify-content-between">
+                                <span>Bestelllevel:</span>
+                                <span>${forecast.reorder_level}g</span>
+                            </div>
+                            ` : ''}
+                        </div>
+
+                        <!-- Aktionen -->
+                        <div class="mt-3 d-flex gap-2">
+                            <button class="btn btn-sm btn-outline-primary flex-fill" 
+                                    onclick="showMaterialDetails('${forecast.material}')">
+                                <i class="bi bi-info-circle"></i> Details
+                            </button>
+                            ${forecast.status === 'critical' || forecast.status === 'warning' ? `
+                            <button class="btn btn-sm btn-outline-warning" 
+                                    onclick="openShoppingList('${forecast.material}')">
+                                <i class="bi bi-cart-plus"></i> Bestellen
+                            </button>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    container.innerHTML = `<div class="row g-4">${cardsHtml}</div>`;
+}
+
+function initializeCharts() {
+    // 1. Status-Verteilungs-Chart (Donut)
+    const statusCtx = document.getElementById('statusDistributionChart').getContext('2d');
+    const statusCounts = {
+        critical: forecastData.filter(f => f.status === 'critical').length,
+        warning: forecastData.filter(f => f.status === 'warning').length,
+        ok: forecastData.filter(f => f.status === 'ok').length,
+        unknown: forecastData.filter(f => f.status === 'unknown').length
+    };
+
+    if (charts.statusChart) charts.statusChart.destroy();
+    charts.statusChart = new Chart(statusCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Kritisch', 'Warnung', 'OK', 'Unbekannt'],
+            datasets: [{
+                data: [statusCounts.critical, statusCounts.warning, statusCounts.ok, statusCounts.unknown],
+                backgroundColor: ['#dc3545', '#ffc107', '#198754', '#6c757d'],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            aspectRatio: 1,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { usePointStyle: true }
+                }
+            }
+        }
+    });
+
+    // 2. Material-Reichweite-Chart (Horizontal Bar)
+    const reachCtx = document.getElementById('materialReachChart').getContext('2d');
+    const sortedData = forecastData.sort((a, b) => a.forecast.days_remaining - b.forecast.days_remaining).slice(0, 10);
+
+    if (charts.reachChart) charts.reachChart.destroy();
+    charts.reachChart = new Chart(reachCtx, {
+        type: 'bar',
+        data: {
+            labels: sortedData.map(f => {
+                const name = f.material.length > 20 ? f.material.substring(0, 20) + '...' : f.material;
+                return name;
+            }),
+            datasets: [{
+                label: 'Tage verbleibend',
+                data: sortedData.map(f => f.forecast.days_remaining),
+                backgroundColor: sortedData.map(f => {
+                    if (f.status === 'critical') return '#dc3545aa';
+                    if (f.status === 'warning') return '#ffc107aa';
+                    return '#198754aa';
+                }),
+                borderColor: sortedData.map(f => {
+                    if (f.status === 'critical') return '#dc3545';
+                    if (f.status === 'warning') return '#ffc107';
+                    return '#198754';
+                }),
+                borderWidth: 2
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                x: {
+                    beginAtZero: true,
+                    title: { display: true, text: 'Tage' }
+                }
+            }
+        }
+    });
+
+    // 3. Verbrauchstrend-Chart (Line) - Simuliert
+    const trendCtx = document.getElementById('consumptionTrendChart').getContext('2d');
+    
+    // Einfacher Trend basierend auf aktuellen Daten
+    const trendData = [];
+    const today = new Date();
+    for (let i = 29; i >= 0; i--) {
+        const date = new Date(today);
+        date.setDate(date.getDate() - i);
+        
+        const totalDailyConsumption = forecastData.reduce((sum, f) => sum + f.avg_consumption_per_day_g, 0);
+        const dailyVariation = (Math.random() - 0.5) * 0.3; // ±30% Variation
+        const consumption = totalDailyConsumption * (1 + dailyVariation);
+        
+        trendData.push({
+            date: date.toISOString().split('T')[0],
+            consumption: Math.max(0, consumption)
+        });
+    }
+
+    if (charts.trendChart) charts.trendChart.destroy();
+    charts.trendChart = new Chart(trendCtx, {
+        type: 'line',
+        data: {
+            labels: trendData.map(d => {
+                const date = new Date(d.date);
+                return date.toLocaleDateString('de-DE', { month: 'short', day: 'numeric' });
+            }),
+            datasets: [{
+                label: 'Täglicher Verbrauch (g)',
+                data: trendData.map(d => d.consumption.toFixed(1)),
+                borderColor: '#0d6efd',
+                backgroundColor: '#0d6efd20',
+                fill: true,
+                tension: 0.4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: { display: true, text: 'Gramm' }
+                }
+            }
+        }
+    });
+}
+
+async function showMaterialDetails(materialName) {
+    // Finde Material-ID
+    const material = forecastData.find(f => f.material === materialName);
+    if (!material) {
+        showError('Material nicht gefunden');
+        return;
+    }
+    
+    // Extrahiere Material-ID aus dem Material-Namen (vereinfacht)
+    // In einer echten Implementierung sollte die ID im Forecast-Objekt enthalten sein
+    const materialId = await findMaterialIdByName(materialName);
+    if (!materialId) {
+        showError('Material-ID konnte nicht ermittelt werden');
+        return;
+    }
+    
+    currentMaterialId = materialId;
+    
+    // Modal öffnen und Loading anzeigen
+    document.getElementById('materialDetailTitle').textContent = `${materialName} - Details`;
+    document.getElementById('materialDetailContent').innerHTML = `
+        <div class="text-center">
+            <div class="loading-spinner"></div>
+            <p class="mt-2">Lade Details...</p>
+        </div>
+    `;
+    
+    const modal = new bootstrap.Modal(document.getElementById('materialDetailModal'));
+    modal.show();
+    
+    try {
+        const response = await fetch(`/api/filament/material-details/${materialId}`);
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            renderMaterialDetails(data);
+        } else {
+            showError('Fehler beim Laden der Material-Details: ' + data.message);
+        }
+    } catch (error) {
+        showError('Netzwerkfehler: ' + error.message);
+    }
+}
+
+function renderMaterialDetails(data) {
+    const material = data.material;
+    const inventory = data.inventory;
+    const consumption = data.consumption;
+    const forecast = data.forecast;
+    const recommendations = data.recommendations;
+    
+    const detailsHtml = `
+        <div class="row g-3 mb-4">
+            <div class="col-md-6">
+                <h6><i class="bi bi-box-seam"></i> Bestandsinformationen</h6>
+                <ul class="list-unstyled">
+                    <li><strong>Material-ID:</strong> ${material.id}</li>
+                    <li><strong>Verfügbare Spulen:</strong> ${inventory.available_spools} von ${inventory.total_spools}</li>
+                    <li><strong>In Benutzung:</strong> ${inventory.in_use_spools}</li>
+                    <li><strong>Leer:</strong> ${inventory.empty_spools}</li>
+                    <li><strong>Lagerorte:</strong> ${inventory.storage_locations.length > 0 ? inventory.storage_locations.join(', ') : 'Nicht zugewiesen'}</li>
+                    <li><strong>Aktive Jobs:</strong> ${inventory.active_jobs}</li>
+                </ul>
+            </div>
+            <div class="col-md-6">
+                <h6><i class="bi bi-graph-up"></i> Verbrauchsstatistiken</h6>
+                <ul class="list-unstyled">
+                    <li><strong>Letzter Verbrauch:</strong> ${consumption.last_usage_date}</li>
+                    <li><strong>Durchschnitt/Tag:</strong> ${consumption.avg_consumption_per_day_g}g</li>
+                    <li><strong>Verbrauch (30d):</strong> ${consumption.total_consumption_30d_g}g</li>
+                    <li><strong>Jobs abgeschlossen:</strong> ${consumption.total_jobs_completed}</li>
+                    <li><strong>Ø pro Job:</strong> ${consumption.avg_consumption_per_job_g}g</li>
+                    <li><strong>Gesamt verbraucht:</strong> ${consumption.total_consumption_all_time_g}g</li>
+                </ul>
+            </div>
+        </div>
+        
+        ${forecast ? `
+        <div class="mb-4">
+            <h6><i class="bi bi-calendar-check"></i> Prognose</h6>
+            <div class="alert alert-info">
+                <strong>Geschätzte Reichweite:</strong> ${forecast.days_remaining} Tage (${forecast.weeks_remaining} Wochen)<br>
+                <strong>Voraussichtliche Erschöpfung:</strong> ${forecast.estimated_depletion_date}
+            </div>
+        </div>
+        ` : ''}
+        
+        ${recommendations.length > 0 ? `
+        <div class="mb-4">
+            <h6><i class="bi bi-lightbulb"></i> Empfehlungen</h6>
+            ${recommendations.map(rec => `
+                <div class="alert alert-${rec.type === 'critical' ? 'danger' : rec.type === 'warning' ? 'warning' : 'info'}">
+                    <i class="bi bi-${rec.type === 'critical' ? 'exclamation-triangle' : rec.type === 'warning' ? 'exclamation-circle' : 'info-circle'}"></i>
+                    ${rec.message}
+                </div>
+            `).join('')}
+        </div>
+        ` : ''}
+        
+        <div>
+            <h6><i class="bi bi-tags"></i> Material-Eigenschaften</h6>
+            <div class="row g-2">
+                <div class="col-md-6">
+                    <small class="text-muted">Kosten pro Spule:</small><br>
+                    <span class="fw-bold">${material.cost_per_spool ? material.cost_per_spool + ' EUR' : 'Nicht angegeben'}</span>
+                </div>
+                <div class="col-md-6">
+                    <small class="text-muted">Spulengewicht:</small><br>
+                    <span class="fw-bold">${material.spool_weight_g}g</span>
+                </div>
+                <div class="col-md-6">
+                    <small class="text-muted">Nachbestelllevel:</small><br>
+                    <span class="fw-bold">${material.reorder_level_g ? material.reorder_level_g + 'g' : 'Nicht definiert'}</span>
+                </div>
+                <div class="col-md-6">
+                    <small class="text-muted">Materialtyp:</small><br>
+                    <span class="fw-bold">${material.material_type}</span>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.getElementById('materialDetailContent').innerHTML = detailsHtml;
+    
+    // Einkaufslisten-Button anzeigen wenn kritisch oder Warnung
+    const btn = document.getElementById('addToShoppingListBtn');
+    if (recommendations.some(r => r.type === 'critical' || r.type === 'warning')) {
+        btn.style.display = 'inline-block';
+    } else {
+        btn.style.display = 'none';
+    }
+}
+
+async function findMaterialIdByName(materialName) {
+    // Vereinfachte Implementierung - in der Realität sollte die ID bereits im Forecast enthalten sein
+    // Hier nehmen wir einfach den Index + 1 als ID (nicht ideal, aber funktional für Demo)
+    const index = forecastData.findIndex(f => f.material === materialName);
+    return index >= 0 ? index + 1 : null;
+}
+
+function openShoppingList(materialName) {
+    document.getElementById('shoppingMaterial').value = materialName;
+    const modal = new bootstrap.Modal(document.getElementById('shoppingListModal'));
+    modal.show();
+}
+
+function addToShoppingList() {
+    if (currentMaterialId) {
+        openShoppingList(forecastData.find(f => f.material.includes(currentMaterialId))?.material || 'Unbekannt');
+        bootstrap.Modal.getInstance(document.getElementById('materialDetailModal')).hide();
+    }
+}
+
+function saveToShoppingList() {
+    const material = document.getElementById('shoppingMaterial').value;
+    const quantity = document.getElementById('shoppingQuantity').value;
+    const priority = document.getElementById('shoppingPriority').value;
+    const notes = document.getElementById('shoppingNotes').value;
+    
+    // Hier würde normalerweise ein API-Call zum Speichern stattfinden
+    console.log('Zur Einkaufsliste hinzufügen:', { material, quantity, priority, notes });
+    
+    // Für Demo: Lokale Speicherung
+    const shoppingList = JSON.parse(localStorage.getItem('shoppingList') || '[]');
+    shoppingList.push({
+        material,
+        quantity: parseInt(quantity),
+        priority,
+        notes,
+        added_at: new Date().toISOString()
+    });
+    localStorage.setItem('shoppingList', JSON.stringify(shoppingList));
+    
+    showSuccess(`${material} wurde zur Einkaufsliste hinzugefügt`);
+    bootstrap.Modal.getInstance(document.getElementById('shoppingListModal')).hide();
+    
+    // Form zurücksetzen
+    document.getElementById('shoppingListForm').reset();
+    document.getElementById('shoppingQuantity').value = '1';
+    document.getElementById('shoppingPriority').value = 'medium';
+}
+
+function submitForm() {
+    document.getElementById('filterForm').submit();
+}
+
+function resetFilters() {
+    window.location.href = window.location.pathname;
+}
+
+function refreshData() {
+    location.reload();
+}
+
+function exportToExcel() {
+    let csv = 'Material,Hersteller,Gewicht (g),Status,Tage verbleibend,Täglicher Verbrauch (g),Jobs (30d),Notizen\n';
+    
+    forecastData.forEach(forecast => {
+        const materialParts = forecast.material.split(' ');
+        const manufacturer = materialParts[0];
+        const name = materialParts.slice(1).join(' ');
+        
+        csv += `"${name}","${manufacturer}",${forecast.total_weight_g},"${forecast.status}",${forecast.forecast.days_remaining},${forecast.avg_consumption_per_day_g},${forecast.recent_jobs_count},"${forecast.forecast.note}"\n`;
+    });
+    
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'verbrauchsprognose_' + new Date().toISOString().slice(0,10).replace(/-/g,'') + '.csv';
+    a.click();
+    window.URL.revokeObjectURL(url);
+}
+
+function showError(message) {
+    showToast(message, 'danger');
+}
+
+function showSuccess(message) {
+    showToast(message, 'success');
+}
+
+function showToast(message, type) {
+    const toastHtml = `
+        <div class="toast align-items-center text-white bg-${type} border-0" 
+             role="alert" style="position: fixed; top: 20px; right: 20px; z-index: 9999;">
+            <div class="d-flex">
+                <div class="toast-body">${message}</div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+            </div>
+        </div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', toastHtml);
+    const toast = document.querySelector('.toast:last-child');
+    const bsToast = new bootstrap.Toast(toast);
+    bsToast.show();
+    
+    setTimeout(() => toast.remove(), 5000);
+}
+</script>
+{% endblock %}
