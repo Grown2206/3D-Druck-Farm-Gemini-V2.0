@@ -11,6 +11,9 @@ from sqlalchemy.types import TypeDecorator, VARCHAR
 from sqlalchemy.dialects.sqlite import JSON
 import json
 from sqlalchemy import func
+from extensions import db
+from sqlalchemy import CheckConstraint, UniqueConstraint
+
 
 # Association Table for SlicerProfile <-> Printer
 slicer_profile_printers = db.Table('slicer_profile_printers',
@@ -168,7 +171,18 @@ class HazardSymbol(str, enum.Enum):
     GHS08_HEALTH_HAZARD = 'GHS08 - Gesundheitsgefahr'
     GHS09_ENVIRONMENTAL = 'GHS09 - Umweltgefährlich'
 
+class DeadlineStatus(str, enum.Enum):
+    """Status-Codierung für Deadlines"""
+    GREEN = 'green'      # > 72h verbleibend
+    YELLOW = 'yellow'    # 24-72h verbleibend  
+    RED = 'red'          # < 24h verbleibend
+    OVERDUE = 'overdue'  # Deadline überschritten
 
+
+class DependencyType(str, enum.Enum):
+    """Typen von Job-Abhängigkeiten"""
+    FINISH_TO_START = 'finish_to_start'  # Standard: B startet nachdem A endet
+    START_TO_START = 'start_to_start'    # B startet wenn A startet
 # --- Models ---
 
 class SlicerProfile(db.Model):
@@ -284,7 +298,7 @@ class Printer(db.Model):
     pressure_advance_settings = db.Column(JSON, nullable=True)
     vfa_test_settings = db.Column(JSON, nullable=True)
 
-    jobs = db.relationship('Job', backref='assigned_printer', lazy='dynamic', cascade="all, delete-orphan")
+    jobs = db.relationship('Job', back_populates='assigned_printer', foreign_keys='Job.printer_id', lazy='dynamic')
     status_logs = db.relationship('PrinterStatusLog', backref='printer', lazy='dynamic', cascade="all, delete-orphan")
     maintenance_logs = db.relationship('MaintenanceLog', backref='printer', lazy='dynamic', cascade="all, delete-orphan")
     slicer_profiles = db.relationship('SlicerProfile', secondary=slicer_profile_printers, back_populates='printers', lazy='dynamic')
@@ -334,6 +348,53 @@ class Printer(db.Model):
         ).order_by(Job.priority.desc(), Job.created_at.asc()).first()
         return next_job
 
+    def is_available_at(self, check_time=None):
+        """Prüft ob Drucker zu einer bestimmten Zeit verfügbar ist (Zeitfenster-Check).Args:check_time: datetime-Objekt oder None (nutzt aktuelle Zeit)Returns: bool: True wenn verfügbar"""
+        if check_time is None:
+            check_time = datetime.datetime.utcnow()
+        
+        # Wenn keine Zeitfenster definiert sind, ist Drucker immer verfügbar
+        if not self.time_windows:
+            return True
+        
+        # Prüfe ob mindestens ein aktives Zeitfenster passt
+        for window in self.time_windows:
+            if window.is_within_window(check_time):
+                return True
+        
+        return False
+    
+    def get_next_available_time(self):
+        """Gibt nächste verfügbare Zeit zurück wenn aktuell außerhalb Zeitfenster"""
+        now = datetime.datetime.utcnow()
+        
+        if self.is_available_at(now):
+            return now
+        
+        # Suche nächstes Zeitfenster in den nächsten 7 Tagen
+        for days_ahead in range(7):
+            check_date = now + datetime.timedelta(days=days_ahead)
+            
+            for window in self.time_windows:
+                if not window.is_active:
+                    continue
+                
+                if check_date.weekday() == window.day_of_week:
+                    # Konstruiere nächste Startzeit
+                    next_start = check_date.replace(
+                        hour=window.start_time.hour,
+                        minute=window.start_time.minute,
+                        second=0,
+                        microsecond=0
+                    )
+                    
+                    if next_start > now:
+                        return next_start
+        
+        return None  # Keine Zeitfenster in nächsten 7 Tagen
+
+
+
 class MaintenanceLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     printer_id = db.Column(db.Integer, db.ForeignKey('printer.id'), nullable=False)
@@ -344,6 +405,8 @@ class MaintenanceLog(db.Model):
     user = db.relationship('User', back_populates='maintenance_logs')
 
 class Job(db.Model):
+    # ==================== BESTEHENDE FELDER ====================
+    # (Lass alle bestehenden Felder wie sie sind!)
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(150), nullable=False)
     status = db.Column(RobustEnum(JobStatus), default=JobStatus.PENDING, nullable=False)
@@ -359,20 +422,99 @@ class Job(db.Model):
     is_archived = db.Column(db.Boolean, default=False, nullable=False)
     source_stl_filename = db.Column(db.String(255), nullable=True)
     required_filament_type_id = db.Column(db.Integer, db.ForeignKey('filament_type.id'), nullable=True)
-    required_filament_type = db.relationship('FilamentType')
-    preparation_time_min = db.Column(db.Integer, nullable=True)
-    post_processing_time_min = db.Column(db.Integer, nullable=True)
-    employee_hourly_rate = db.Column(db.Float, nullable=True)
-    material_cost = db.Column(db.Float, nullable=True)
-    machine_cost = db.Column(db.Float, nullable=True)
-    personnel_cost = db.Column(db.Float, nullable=True)
-    total_cost = db.Column(db.Float, nullable=True)
-    material_number = db.Column(db.String(50), nullable=True)
-    material_short_text = db.Column(db.String(100), nullable=True)
-    target_quantity_parts = db.Column(db.Integer, nullable=True)
-    estimated_end_date = db.Column(db.Date, nullable=True)
-    snapshots = db.relationship('PrintSnapshot', backref='job', lazy='dynamic', cascade="all, delete-orphan")
-
+    actual_filament_used_g = db.Column(db.Float, nullable=True)
+    actual_cost = db.Column(db.Float, nullable=True)
+    printer_id = db.Column(db.Integer, db.ForeignKey('printer.id'), nullable=True)
+    gcode_file_id = db.Column(db.Integer, db.ForeignKey('g_code_file.id'), nullable=True)
+    required_filament_type_id = db.Column(db.Integer, db.ForeignKey('filament_type.id'), nullable=True)
+    
+    # NEUE Felder
+    deadline = db.Column(db.DateTime, nullable=True)
+    project_id = db.Column(db.Integer, db.ForeignKey('project.id', ondelete='SET NULL'), nullable=True)
+    parent_job_id = db.Column(db.Integer, db.ForeignKey('job.id', ondelete='SET NULL'), nullable=True)
+    priority_score = db.Column(db.Float, default=0.0, nullable=False)
+    is_on_critical_path = db.Column(db.Boolean, default=False, nullable=False)
+    estimated_start_time = db.Column(db.DateTime, nullable=True)
+    estimated_end_time = db.Column(db.DateTime, nullable=True)
+    
+    # Relationships (KORRIGIERT!)
+    assigned_printer = db.relationship('Printer', foreign_keys=[printer_id], back_populates='jobs')
+    required_filament_type = db.relationship('FilamentType', foreign_keys=[required_filament_type_id])
+    cost_calculations = db.relationship('CostCalculation', backref='job', lazy='dynamic', cascade="all, delete-orphan")
+    
+    # NEUE Relationships
+    project = db.relationship('Project', back_populates='jobs')
+    parent_job = db.relationship('Job', remote_side=[id], backref='sub_jobs')
+    
+    # ==================== NEUE PROPERTIES (HINZUFÜGEN!) ====================
+    
+    @property
+    def deadline_status(self):
+        """Berechnet Deadline-Status mit Farbcodierung"""
+        if not self.deadline:
+            return None
+        
+        now = datetime.datetime.utcnow()
+        time_remaining = (self.deadline - now).total_seconds() / 3600
+        
+        if time_remaining < 0:
+            return DeadlineStatus.OVERDUE
+        elif time_remaining < 24:
+            return DeadlineStatus.RED
+        elif time_remaining < 72:
+            return DeadlineStatus.YELLOW
+        else:
+            return DeadlineStatus.GREEN
+    
+    @property
+    def hours_until_deadline(self):
+        """Gibt Stunden bis Deadline zurück"""
+        if not self.deadline:
+            return None
+        
+        now = datetime.datetime.utcnow()
+        return round((self.deadline - now).total_seconds() / 3600, 1)
+    
+    @property
+    def can_start(self):
+        """Prüft ob alle Abhängigkeiten erfüllt sind"""
+        for dep in self.dependencies:
+            if dep.dependency_type == DependencyType.FINISH_TO_START:
+                if dep.depends_on.status != JobStatus.COMPLETED:
+                    return False
+            elif dep.dependency_type == DependencyType.START_TO_START:
+                if dep.depends_on.status == JobStatus.PENDING:
+                    return False
+        return True
+    
+    def get_blocking_dependencies(self):
+        """Gibt Liste der blockierenden Abhängigkeiten zurück"""
+        blocking = []
+        for dep in self.dependencies:
+            if dep.dependency_type == DependencyType.FINISH_TO_START:
+                if dep.depends_on.status != JobStatus.COMPLETED:
+                    blocking.append(dep)
+            elif dep.dependency_type == DependencyType.START_TO_START:
+                if dep.depends_on.status == JobStatus.PENDING:
+                    blocking.append(dep)
+        return blocking
+    
+    def get_all_dependencies(self, visited=None):
+        """Gibt alle transitiven Abhängigkeiten zurück"""
+        if visited is None:
+            visited = set()
+        
+        if self.id in visited:
+            return []
+        
+        visited.add(self.id)
+        deps = [self]
+        
+        for dep in self.dependencies:
+            deps.extend(dep.depends_on.get_all_dependencies(visited))
+        
+        return deps
+    
     def get_elapsed_and_total_time_seconds(self):
         total_seconds = 0
         if self.gcode_file and self.gcode_file.estimated_print_time_min:
@@ -761,6 +903,7 @@ class CostCalculation(db.Model):
     total_price = db.Column(db.Float)
     filament_type = db.relationship('FilamentType')
     printer = db.relationship('Printer')
+    job_id = db.Column(db.Integer, db.ForeignKey('job.id'), nullable=False)
 
 class ToDo(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -808,7 +951,161 @@ class LayoutItem(db.Model):
 
     def __repr__(self):
         return f'<LayoutItem {self.name}>'
+
+class Project(db.Model):
+    """
+    Gruppierung von zusammengehörigen Jobs (Multi-Part Jobs).
+    Ermöglicht Projekt-Tracking und gemeinsame Deadlines.
+    """
+    __tablename__ = 'project'
     
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), nullable=False, unique=True)
+    description = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow, nullable=False)
+    deadline = db.Column(db.DateTime, nullable=True)
+    status = db.Column(db.String(20), default='active', nullable=False)  # active, completed, cancelled
+    color = db.Column(db.String(7), default='#0d6efd', nullable=False)  # Hex-Farbe für UI
+    
+    # Relationships
+    jobs = db.relationship('Job', back_populates='project', lazy='dynamic', cascade='all, delete-orphan')
+    
+    @property
+    def completion_percentage(self):
+        """Berechnet den Fortschritt des Projekts in Prozent"""
+        total_jobs = self.jobs.count()
+        if total_jobs == 0:
+            return 0.0
+        
+        completed = self.jobs.filter_by(status=JobStatus.COMPLETED).count()
+        return round((completed / total_jobs) * 100, 1)
+    
+    @property
+    def deadline_status(self):
+        """Berechnet den Deadline-Status des Projekts mit Farbcodierung"""
+        if not self.deadline:
+            return None
+        
+        now = datetime.datetime.utcnow()
+        time_remaining = (self.deadline - now).total_seconds() / 3600  # in Stunden
+        
+        if time_remaining < 0:
+            return DeadlineStatus.OVERDUE
+        elif time_remaining < 24:
+            return DeadlineStatus.RED
+        elif time_remaining < 72:
+            return DeadlineStatus.YELLOW
+        else:
+            return DeadlineStatus.GREEN
+    
+    @property
+    def estimated_completion_time(self):
+        """Berechnet voraussichtliche Fertigstellung basierend auf Jobs"""
+        pending_jobs = self.jobs.filter(
+            Job.status.in_([JobStatus.PENDING, JobStatus.ASSIGNED, JobStatus.QUEUED, JobStatus.PRINTING])
+        ).all()
+        
+        if not pending_jobs:
+            return datetime.datetime.utcnow()
+        
+        # Summiere geschätzte Zeiten
+        total_minutes = 0
+        for job in pending_jobs:
+            if job.gcode_file and job.gcode_file.estimated_print_time_min:
+                total_minutes += job.gcode_file.estimated_print_time_min
+        
+        return datetime.datetime.utcnow() + datetime.timedelta(minutes=total_minutes)
+    
+    def __repr__(self):
+        return f'<Project {self.name}>'
+
+
+class JobDependency(db.Model):
+    """
+    Definiert Abhängigkeiten zwischen Jobs.
+    Job B kann erst starten wenn Job A bestimmte Bedingungen erfüllt.
+    """
+    __tablename__ = 'job_dependency'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    job_id = db.Column(db.Integer, db.ForeignKey('job.id', ondelete='CASCADE'), nullable=False)
+    depends_on_job_id = db.Column(db.Integer, db.ForeignKey('job.id', ondelete='CASCADE'), nullable=False)
+    dependency_type = db.Column(
+        RobustEnum(DependencyType), 
+        default=DependencyType.FINISH_TO_START, 
+        nullable=False
+    )
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow, nullable=False)
+    
+    # Relationships
+    job = db.relationship('Job', foreign_keys=[job_id], backref='dependencies')
+    depends_on = db.relationship('Job', foreign_keys=[depends_on_job_id], backref='dependents')
+    
+    # Constraints
+    __table_args__ = (
+        UniqueConstraint('job_id', 'depends_on_job_id', name='uq_job_dependency'),
+        CheckConstraint('job_id != depends_on_job_id', name='ck_no_self_dependency'),
+    )
+    
+    def __repr__(self):
+        return f'<JobDependency Job{self.job_id} depends on Job{self.depends_on_job_id}>'
+
+
+class TimeWindow(db.Model):
+    """
+    Definiert erlaubte Betriebszeiten für Drucker.
+    Beispiel: Drucker läuft nur Montag-Freitag 8-18 Uhr.
+    """
+    __tablename__ = 'time_window'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    printer_id = db.Column(db.Integer, db.ForeignKey('printer.id', ondelete='CASCADE'), nullable=False)
+    day_of_week = db.Column(db.Integer, nullable=False)  # 0=Montag, 6=Sonntag
+    start_time = db.Column(db.Time, nullable=False)
+    end_time = db.Column(db.Time, nullable=False)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    description = db.Column(db.String(200), nullable=True)  # z.B. "Bürozeiten"
+    
+    # Relationship
+    printer = db.relationship('Printer', backref='time_windows')
+    
+    __table_args__ = (
+        CheckConstraint('day_of_week >= 0 AND day_of_week <= 6', name='ck_valid_weekday'),
+    )
+    
+    def is_within_window(self, check_time=None):
+        """
+        Prüft ob eine bestimmte Zeit innerhalb des Zeitfensters liegt.
+        
+        Args:
+            check_time: datetime-Objekt oder None (nutzt aktuelle Zeit)
+            
+        Returns:
+            bool: True wenn innerhalb des Fensters
+        """
+        if check_time is None:
+            check_time = datetime.datetime.utcnow()
+        
+        if not self.is_active:
+            return False
+        
+        # Prüfe Wochentag
+        if check_time.weekday() != self.day_of_week:
+            return False
+        
+        # Prüfe Uhrzeit
+        current_time = check_time.time()
+        return self.start_time <= current_time <= self.end_time
+    
+    @property
+    def weekday_name(self):
+        """Gibt deutschen Wochentag zurück"""
+        weekdays = ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag']
+        return weekdays[self.day_of_week]
+    
+    def __repr__(self):
+        return f'<TimeWindow {self.weekday_name} {self.start_time}-{self.end_time}>'
+
     
 # models.py - AM ENDE HINZUFÜGEN
 

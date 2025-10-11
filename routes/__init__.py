@@ -22,6 +22,7 @@ def register_blueprints(app: Flask):
     from .batch_planner import batch_planner_bp
     from .maintenance_new import maintenance_new_bp
     from .filament_api import filament_api_bp
+    from .projects import projects_bp  # NEU
 
 
 
@@ -46,3 +47,4 @@ def register_blueprints(app: Flask):
     app.register_blueprint(batch_planner_bp)
     app.register_blueprint(maintenance_new_bp)
     app.register_blueprint(filament_api_bp)
+    app.register_blueprint(projects_bp)  # NEU

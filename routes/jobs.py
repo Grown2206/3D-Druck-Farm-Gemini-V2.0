@@ -13,6 +13,44 @@ import os
 
 jobs_bp = Blueprint('jobs_bp', __name__, url_prefix='/jobs')
 
+@jobs_bp.route('/dependencies')
+@login_required
+def manage_dependencies():
+    jobs = Job.query.filter(Job.is_archived == False).all()
+    
+    # Job-Objekte in serialisierbare Dictionaries umwandeln
+    jobs_data = []
+    for job in jobs:
+        jobs_data.append({
+            'id': job.id,
+            'name': job.name,
+            'status': job.status.value if job.status else '',
+            'priority': job.priority or 0,
+            'created_at': job.created_at.strftime('%Y-%m-%d') if job.created_at else '',
+            'printer_name': job.assigned_printer.name if job.assigned_printer else 'Nicht zugewiesen',
+            'project_name': job.project.name if job.project else '',
+            'dependencies': [
+                {
+                    'id': dep.id,
+                    'depends_on_job_id': dep.depends_on_job_id,
+                    'depends_on_job_name': dep.depends_on.name,
+                    'type': dep.dependency_type.value
+                } for dep in job.dependencies
+            ] if hasattr(job, 'dependencies') else [],
+            'dependents': [
+                {
+                    'id': dep.id,
+                    'dependent_job_id': dep.job_id,
+                    'dependent_job_name': dep.job.name,
+                    'type': dep.dependency_type.value
+                } for dep in job.dependents
+            ] if hasattr(job, 'dependents') else []
+        })
+    
+    return render_template('jobs/dependencies.html', jobs=jobs_data)
+
+
+
 @jobs_bp.route('/dashboard')
 @login_required
 def dashboard():
@@ -121,7 +159,7 @@ def review_job_page(job_id):
         flash('Nur abgeschlossene Aufträge können bewertet werden.', 'warning')
         return redirect(url_for('jobs_bp.job_details', job_id=job.id))
     
-    snapshots = job.snapshots.order_by(PrintSnapshot.timestamp.asc()).all()
+    snapshots = PrintSnapshot.query.filter_by(job_id=job.id).order_by(PrintSnapshot.timestamp.asc()).all()
     return render_template('jobs/review.html', job=job, snapshots=snapshots)
 
 
@@ -281,3 +319,9 @@ def export_archive():
         writer.writerow([ job.id, job.name, job.status.value if job.status else '', job.quality_assessment.value if job.quality_assessment else '', job.assigned_printer.name if job.assigned_printer else 'N/A', job.gcode_file.filename if job.gcode_file else 'N/A', job.required_filament_type.name if job.required_filament_type else 'N/A', job.created_at.strftime('%Y-%m-%d %H:%M:%S') if job.created_at else '', job.start_time.strftime('%Y-%m-%d %H:%M:%S') if job.start_time else '', job.end_time.strftime('%Y-%m-%d %H:%M:%S') if job.end_time else '', round(job.actual_print_duration_s / 60, 2) if job.actual_print_duration_s else 0, job.material_cost, job.machine_cost, job.personnel_cost, job.total_cost ])
     output.seek(0)
     return Response( output, mimetype="text/csv", headers={"Content-Disposition": "attachment;filename=archivierte_auftraege.csv"} )
+
+@jobs_bp.route('/calendar')
+@login_required
+def calendar_view():
+    """Kalender-Ansicht für Aufträge"""
+    return render_template('jobs/calendar.html')
