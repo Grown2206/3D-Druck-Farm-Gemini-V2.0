@@ -1,116 +1,74 @@
 {% extends "base.html" %}
 
-{% block title %}Abhängigkeiten verwalten{% endblock %}
+{% block title %}Abhängigkeiten für {{ job.name }}{% endblock %}
 
 {% block content %}
 <div class="container-fluid mt-4">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <div>
-            <h2><i class="bi bi-diagram-3"></i> Job-Abhängigkeiten verwalten</h2>
-            <p class="text-muted">Definiere welche Jobs von anderen abhängen</p>
-        </div>
-        <a href="{{ url_for('jobs_bp.list_jobs') }}" class="btn btn-secondary">
-            <i class="bi bi-arrow-left"></i> Zurück
-        </a>
-    </div>
-
     <div class="row">
-        <!-- Linke Seite: Job-Auswahl -->
-        <div class="col-md-4">
-            <div class="card">
-                <div class="card-header">
-                    <h5><i class="bi bi-list"></i> Jobs</h5>
-                </div>
-                <div class="card-body" style="max-height: 600px; overflow-y: auto;">
-                    <div class="list-group">
-                        {% for job in jobs %}
-                        <button class="list-group-item list-group-item-action {% if job.is_on_critical_path %}list-group-item-danger{% endif %}"
-                                onclick="selectJob({{ job.id }}, '{{ job.name }}')">
-                            <div class="d-flex justify-content-between align-items-start">
-                                <div>
-                                    <strong>{{ job.name }}</strong>
-                                    {% if job.project %}
-                                    <br><small class="text-muted">📁 {{ job.project.name }}</small>
-                                    {% endif %}
-                                </div>
-                                <div>
-                                    {% if job.is_on_critical_path %}
-                                    <i class="bi bi-exclamation-triangle-fill text-danger" title="Kritischer Pfad"></i>
-                                    {% endif %}
-                                    {% if job.dependencies %}
-                                    <span class="badge bg-primary">{{ job.dependencies|length }}</span>
-                                    {% endif %}
-                                </div>
-                            </div>
-                        </button>
-                        {% endfor %}
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Rechte Seite: Abhängigkeiten -->
-        <div class="col-md-8">
-            <div class="card" id="dependency-card" style="display: none;">
-                <div class="card-header">
-                    <h5 id="selected-job-name">Job auswählen...</h5>
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                    <h4 class="mb-0">
+                        <i class="fas fa-project-diagram me-2"></i>Abhängigkeiten für Job: <strong>{{ job.name }}</strong>
+                    </h4>
+                    <a href="{{ url_for('jobs_bp.job_details', job_id=job.id) }}" class="btn btn-sm btn-outline-secondary">
+                        <i class="fas fa-arrow-left me-1"></i>Zurück zu den Details
+                    </a>
                 </div>
                 <div class="card-body">
-                    <!-- Bestehende Abhängigkeiten -->
-                    <h6>Dieser Job hängt ab von:</h6>
-                    <div id="dependencies-list" class="mb-4">
-                        <!-- Wird via JavaScript gefüllt -->
-                    </div>
-
-                    <!-- Neue Abhängigkeit hinzufügen -->
-                    <hr>
-                    <h6>Neue Abhängigkeit hinzufügen</h6>
-                    <div class="row">
-                        <div class="col-md-6">
-                            <label class="form-label">Hängt ab von Job:</label>
-                            <select class="form-select" id="new-depends-on">
-                                <option value="">Job auswählen...</option>
-                            </select>
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            Neue Abhängigkeit hinzufügen
                         </div>
-                        <div class="col-md-4">
-                            <label class="form-label">Typ:</label>
-                            <select class="form-select" id="new-dep-type">
-                                <option value="finish_to_start">Finish-to-Start</option>
-                                <option value="start_to_start">Start-to-Start</option>
-                            </select>
+                        <div class="card-body">
+                            <form id="add-dependency-form">
+                                <div class="row g-3 align-items-end">
+                                    <div class="col-md-6">
+                                        <label for="depends-on-job" class="form-label">Dieser Job hängt ab von:</label>
+                                        <select id="depends-on-job" class="form-select">
+                                            <option value="">-- Job auswählen --</option>
+                                            {% for p_dep in potential_dependencies %}
+                                                <option value="{{ p_dep.id }}">{{ p_dep.name }} (ID: {{ p_dep.id }})</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label for="dependency-type" class="form-label">Abhängigkeitstyp:</label>
+                                        <select id="dependency-type" class="form-select">
+                                            <option value="finish_to_start">Finish-to-Start</option>
+                                            <option value="start_to_start">Start-to-Start</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <button type="submit" class="btn btn-primary w-100">
+                                            <i class="fas fa-plus me-1"></i>Hinzufügen
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
+                             <div id="form-feedback" class="mt-3"></div>
                         </div>
-                        <div class="col-md-2">
-                            <label class="form-label">&nbsp;</label>
-                            <button class="btn btn-primary w-100" onclick="addDependency()">
-                                <i class="bi bi-plus"></i> Hinzufügen
-                            </button>
-                        </div>
                     </div>
 
-                    <!-- Erklärung -->
-                    <div class="alert alert-info mt-3">
-                        <small>
-                            <strong>Finish-to-Start:</strong> Dieser Job startet erst wenn der andere abgeschlossen ist<br>
-                            <strong>Start-to-Start:</strong> Dieser Job startet sobald der andere startet
-                        </small>
-                    </div>
-
-                    <!-- Jobs die von diesem abhängen -->
-                    <hr>
-                    <h6>Folgende Jobs hängen von diesem Job ab:</h6>
-                    <div id="dependents-list">
-                        <!-- Wird via JavaScript gefüllt -->
-                    </div>
-                </div>
-            </div>
-
-            <!-- Abhängigkeits-Graph -->
-            <div class="card mt-3" id="graph-card" style="display: none;">
-                <div class="card-header">
-                    <h5><i class="bi bi-diagram-2"></i> Abhängigkeits-Graph</h5>
-                </div>
-                <div class="card-body">
-                    <div id="dependency-graph" style="height: 400px;"></div>
+                    <h5>Bestehende Abhängigkeiten:</h5>
+                    <p>Dieser Job kann erst gestartet werden, wenn die folgenden Jobs abgeschlossen sind:</p>
+                    <ul class="list-group" id="dependency-list">
+                        {% if job.dependencies %}
+                            {% for dep in job.dependencies %}
+                                <li class="list-group-item d-flex justify-content-between align-items-center" data-id="{{ dep.id }}">
+                                    <span>
+                                        <strong>{{ dep.depends_on.name }}</strong>
+                                        <small class="text-muted ms-2">({{ dep.dependency_type.value }})</small>
+                                    </span>
+                                    <button class="btn btn-sm btn-outline-danger remove-dependency-btn" data-id="{{ dep.id }}">
+                                        <i class="fas fa-trash-alt"></i>
+                                    </button>
+                                </li>
+                            {% endfor %}
+                        {% else %}
+                            <li id="no-dependencies" class="list-group-item text-muted">Keine Abhängigkeiten vorhanden.</li>
+                        {% endif %}
+                    </ul>
                 </div>
             </div>
         </div>
@@ -118,145 +76,119 @@
 </div>
 
 <script>
-let currentJobId = null;
-let allJobs = {{ jobs|tojson }};
+document.addEventListener('DOMContentLoaded', function () {
+    const form = document.getElementById('add-dependency-form');
+    const feedbackDiv = document.getElementById('form-feedback');
+    const dependencyList = document.getElementById('dependency-list');
+    const noDependenciesLi = document.getElementById('no-dependencies');
 
-function selectJob(jobId, jobName) {
-    currentJobId = jobId;
-    document.getElementById('selected-job-name').textContent = jobName;
-    document.getElementById('dependency-card').style.display = 'block';
-    document.getElementById('graph-card').style.display = 'block';
-    
-    loadDependencies(jobId);
-    populateJobSelect(jobId);
-}
+    // Hinzufügen einer Abhängigkeit
+    form.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        feedbackDiv.innerHTML = ''; 
 
-function loadDependencies(jobId) {
-    // Lade Abhängigkeiten
-    fetch(`/api/job/${jobId}/dependencies`)
-        .then(response => response.json())
-        .then(data => {
-            const depList = document.getElementById('dependencies-list');
-            
-            if (data.dependencies && data.dependencies.length > 0) {
-                let html = '<div class="list-group">';
-                data.dependencies.forEach(dep => {
-                    const statusIcon = dep.is_blocking ? '🔴' : '✅';
-                    const statusText = dep.is_blocking ? 'BLOCKIERT' : dep.status;
-                    html += `
-                        <div class="list-group-item d-flex justify-content-between align-items-center">
-                            <div>
-                                ${statusIcon} <strong>${dep.depends_on_job_name}</strong>
-                                <br><small class="text-muted">${dep.type}</small>
-                            </div>
-                            <div>
-                                <span class="badge bg-secondary">${statusText}</span>
-                                <button class="btn btn-sm btn-danger" onclick="deleteDependency(${dep.id})">
-                                    <i class="bi bi-trash"></i>
-                                </button>
-                            </div>
-                        </div>
-                    `;
-                });
-                html += '</div>';
-                depList.innerHTML = html;
-            } else {
-                depList.innerHTML = '<p class="text-muted">Keine Abhängigkeiten definiert</p>';
-            }
-            
-            // Dependents
-            const depsList = document.getElementById('dependents-list');
-            if (data.dependents && data.dependents.length > 0) {
-                let html = '<div class="list-group">';
-                data.dependents.forEach(dep => {
-                    html += `
-                        <div class="list-group-item">
-                            <strong>${dep.dependent_job_name}</strong>
-                            <small class="text-muted"> (${dep.type})</small>
-                        </div>
-                    `;
-                });
-                html += '</div>';
-                depsList.innerHTML = html;
-            } else {
-                depsList.innerHTML = '<p class="text-muted">Keine Jobs hängen von diesem ab</p>';
-            }
-        })
-        .catch(error => {
-            console.error('Fehler:', error);
-            document.getElementById('dependencies-list').innerHTML = 
-                '<div class="alert alert-danger">Fehler beim Laden</div>';
-        });
-    
-    // Lade Graph
-    loadDependencyGraph(jobId);
-}
+        const dependsOnId = document.getElementById('depends-on-job').value;
+        const depType = document.getElementById('dependency-type').value;
 
-function populateJobSelect(currentJobId) {
-    const select = document.getElementById('new-depends-on');
-    select.innerHTML = '<option value="">Job auswählen...</option>';
-    
-    allJobs.forEach(job => {
-        if (job.id !== currentJobId) {
-            select.innerHTML += `<option value="${job.id}">${job.name}</option>`;
+        if (!dependsOnId) {
+            showAlert('Bitte wählen Sie einen Job aus.', 'warning');
+            return;
         }
-    });
-}
 
-function addDependency() {
-    const dependsOnId = document.getElementById('new-depends-on').value;
-    const depType = document.getElementById('new-dep-type').value;
-    
-    if (!dependsOnId) {
-        alert('Bitte wähle einen Job aus!');
-        return;
-    }
-    
-    fetch(`/api/job/${currentJobId}/dependencies`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-            depends_on_job_id: parseInt(dependsOnId),
-            type: depType
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            alert('✓ Abhängigkeit hinzugefügt!');
-            loadDependencies(currentJobId);
-            // Reset
-            document.getElementById('new-depends-on').value = '';
-        } else {
-            alert('❌ Fehler: ' + data.error);
-        }
-    })
-    .catch(error => {
-        alert('Fehler: ' + error);
-    });
-}
+        try {
+            const response = await fetch("{{ url_for('jobs_bp.add_dependency') }}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({
+                    job_id: {{ job.id }},
+                    depends_on_id: dependsOnId,
+                    type: depType
+                })
+            });
 
-function deleteDependency(depId) {
-    if (confirm('Abhängigkeit wirklich löschen?')) {
-        fetch(`/api/dependency/${depId}`, {
-            method: 'DELETE'
-        })
-        .then(response => response.json())
-        .then(data => {
+            const data = await response.json();
+
             if (data.success) {
-                alert('✓ Abhängigkeit gelöscht!');
-                loadDependencies(currentJobId);
+                showAlert('Abhängigkeit erfolgreich hinzugefügt.', 'success');
+                addDependencyToList(data.dependency);
+                form.reset();
             } else {
-                alert('❌ Fehler: ' + data.error);
+                showAlert(`Fehler: ${data.error || 'Unbekannter Fehler'}`, 'danger');
             }
-        });
-    }
-}
+        } catch (error) {
+            console.error('Fetch-Fehler:', error);
+            showAlert('Ein Kommunikationsfehler ist aufgetreten. Prüfen Sie die Browser-Konsole.', 'danger');
+        }
+    });
 
-function loadDependencyGraph(jobId) {
-    // Placeholder - kann später mit D3.js oder vis.js erweitert werden
-    document.getElementById('dependency-graph').innerHTML = 
-        '<div class="text-center text-muted">Graph-Visualisierung kommt bald...</div>';
-}
+    // Entfernen einer Abhängigkeit
+    dependencyList.addEventListener('click', async function(e) {
+        if (e.target.closest('.remove-dependency-btn')) {
+            const button = e.target.closest('.remove-dependency-btn');
+            const dependencyId = button.dataset.id;
+            
+            if (confirm('Möchten Sie diese Abhängigkeit wirklich entfernen?')) {
+                try {
+                    const response = await fetch(`/dependencies/remove/${dependencyId}`, {
+                        method: 'DELETE',
+                        headers: {
+                            'X-CSRFToken': '{{ csrf_token() }}'
+                        }
+                    });
+
+                    const data = await response.json();
+
+                    if (data.success) {
+                        showAlert('Abhängigkeit entfernt.', 'success');
+                        button.closest('li').remove();
+                        checkIfListIsEmpty();
+                    } else {
+                        showAlert(`Fehler: ${data.error || 'Unbekannter Fehler'}`, 'danger');
+                    }
+                } catch (error) {
+                     console.error('Fetch-Fehler:', error);
+                     showAlert('Ein Kommunikationsfehler ist aufgetreten.', 'danger');
+                }
+            }
+        }
+    });
+
+    function addDependencyToList(dependency) {
+        if (noDependenciesLi) {
+            noDependenciesLi.remove();
+        }
+
+        const li = document.createElement('li');
+        li.className = 'list-group-item d-flex justify-content-between align-items-center';
+        li.dataset.id = dependency.id;
+        li.innerHTML = `
+            <span>
+                <strong>${dependency.depends_on_name}</strong>
+                <small class="text-muted ms-2">(${dependency.type})</small>
+            </span>
+            <button class="btn btn-sm btn-outline-danger remove-dependency-btn" data-id="${dependency.id}">
+                <i class="fas fa-trash-alt"></i>
+            </button>
+        `;
+        dependencyList.appendChild(li);
+    }
+    
+    function checkIfListIsEmpty() {
+        if (dependencyList.children.length === 0) {
+             const li = document.createElement('li');
+             li.id = 'no-dependencies';
+             li.className = 'list-group-item text-muted';
+             li.textContent = 'Keine Abhängigkeiten vorhanden.';
+             dependencyList.appendChild(li);
+        }
+    }
+
+    function showAlert(message, category) {
+        feedbackDiv.innerHTML = `<div class="alert alert-${category}" role="alert">${message}</div>`;
+    }
+});
 </script>
 {% endblock %}

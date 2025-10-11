@@ -3,23 +3,62 @@
 {% block title %}Registrieren{% endblock %}
 
 {% block content %}
-<div class="auth-container">
-    <h3>Registrieren</h3>
-    <form method="POST">
-        <div>
-            <label for="username">Benutzername</label>
-            <input type="text" id="username" name="username" required>
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6 col-lg-4">
+            <div class="card shadow-lg">
+                <div class="card-body p-4">
+                    <h2 class="card-title text-center mb-4">Neues Konto erstellen</h2>
+
+                    <form method="POST" action="{{ url_for('auth_bp.register') }}">
+                        {{ form.hidden_tag() }}
+
+                        <div class="mb-3">
+                            {{ form.username.label(class="form-label") }}
+                            {{ form.username(class="form-control form-control-lg") }}
+                            {% if form.username.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.username.errors %}
+                                        <span>{{ error }}</span>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="mb-3">
+                            {{ form.password.label(class="form-label") }}
+                            {{ form.password(class="form-control form-control-lg") }}
+                             {% if form.password.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.password.errors %}
+                                        <span>{{ error }}</span>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="mb-3">
+                            {{ form.confirm_password.label(class="form-label") }}
+                            {{ form.confirm_password(class="form-control form-control-lg") }}
+                             {% if form.confirm_password.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.confirm_password.errors %}
+                                        <span>{{ error }}</span>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="d-grid mt-4">
+                            {{ form.submit(class="btn btn-primary btn-lg") }}
+                        </div>
+                    </form>
+                     <div class="text-center mt-3">
+                        <small>Bereits registriert? <a href="{{ url_for('auth_bp.login') }}">Hier anmelden</a></small>
+                    </div>
+                </div>
+            </div>
         </div>
-        <div>
-            <label for="password">Passwort</label>
-            <input type="password" id="password" name="password" required>
-        </div>
-        <div style="margin-top: 20px;">
-            <button type="submit" class="btn btn-primary" style="width: 100%;">Registrieren</button>
-        </div>
-    </form>
-    <div style="text-align: center; margin-top: 15px;">
-        <small>Bereits registriert? <a href="{{ url_for('auth_bp.login') }}">Hier anmelden</a></small>
     </div>
 </div>
 {% endblock %}

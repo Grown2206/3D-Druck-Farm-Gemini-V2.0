@@ -8,7 +8,7 @@
     <h1><i class="bi bi-card-checklist"></i> Details</h1>
     <div class="header-actions">
         {% if job.status == models.JobStatus.COMPLETED and job.quality_assessment == models.JobQuality.NOT_REVIEWED %}
-            <a href="{{ url_for('jobs_bp.review_job_page', job_id=job.id) }}" class="btn btn-warning"><i class="bi bi-star-fill"></i> Auftrag bewerten</a>
+            <a href="{{ url_for('jobs_bp.job_dependencies', job_id=job.id) }}"> class="btn btn-warning"><i class="bi bi-star-fill"></i> Auftrag bewerten</a>
         {% endif %}
         
         <a href="{{ url_for('jobs_bp.job_details', job_id=job.id, edit=true) }}" class="btn btn-primary"><i class="bi bi-pencil-fill"></i> Bearbeiten</a>

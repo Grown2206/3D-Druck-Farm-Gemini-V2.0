@@ -6,7 +6,31 @@ from wtforms.validators import DataRequired, Length, EqualTo, Optional, Validati
 from models import UserRole, MaintenanceTaskType
 import inspect
 from datetime import datetime
+from models import User
 
+class RegistrationForm(FlaskForm):
+    """Formular für die Benutzerregistrierung."""
+    username = StringField('Benutzername', 
+                           validators=[DataRequired(), Length(min=3, max=20)])
+    password = PasswordField('Passwort', 
+                             validators=[DataRequired(), Length(min=6)])
+    confirm_password = PasswordField('Passwort bestätigen', 
+                                     validators=[DataRequired(), EqualTo('password', message='Passwörter müssen übereinstimmen.')])
+    submit = SubmitField('Registrieren')
+
+    def validate_username(self, username):
+        """Prüft, ob der Benutzername bereits existiert."""
+        user = User.query.filter_by(username=username.data).first()
+        if user:
+            raise ValidationError('Dieser Benutzername ist bereits vergeben. Bitte wählen Sie einen anderen.')
+
+class LoginForm(FlaskForm):
+    """Formular für die Benutzeranmeldung."""
+    username = StringField('Benutzername', 
+                           validators=[DataRequired()])
+    password = PasswordField('Passwort', 
+                             validators=[DataRequired()])
+    submit = SubmitField('Anmelden')
 # --- Formular für den Slicer (KORRIGIERT) ---
 class SlicerForm(FlaskForm):
     stl_file = FileField(

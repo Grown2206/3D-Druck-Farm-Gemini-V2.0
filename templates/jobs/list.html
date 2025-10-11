@@ -69,7 +69,7 @@
                 {% for job in jobs %}
                 <tr class="clickable-row" data-href="{{ url_for('jobs_bp.job_details', job_id=job.id) }}">
                     <td>
-                        <a href="{{ url_for('jobs_bp.job_details', job_id=job.id) }}">{{ job.name }}</a>
+                        <a href="{{ url_for('jobs_bp.job_dependencies', job_id=job.id) }}">{{ job.name }}</a>
                         {% if job.target_quantity_parts %}<br><small class="text-muted">Menge: {{ job.target_quantity_parts }} Stk.</small>{% endif %}
                     </td>
                     <td><span class="badge status-{{ job.status.name|lower }}">{{ job.status.value }}</span></td>

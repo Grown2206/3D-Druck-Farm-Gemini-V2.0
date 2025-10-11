@@ -6,10 +6,11 @@ import codecs
 from datetime import datetime
 from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app
 from extensions import db
-from models import Job, Printer, GCodeFile, FilamentType, JobStatus, JobQuality, PrinterStatus, PrintSnapshot, FilamentSpool
+from models import Job, Printer, GCodeFile, FilamentType, JobStatus, JobQuality, PrinterStatus, PrintSnapshot, FilamentSpool, JobDependency, DependencyType 
 from flask_login import login_required
 from .forms import update_model_from_form
 import os
+from sqlalchemy import or_
 
 jobs_bp = Blueprint('jobs_bp', __name__, url_prefix='/jobs')
 
@@ -46,10 +47,27 @@ def manage_dependencies():
                 } for dep in job.dependents
             ] if hasattr(job, 'dependents') else []
         })
+@jobs_bp.route('/<int:job_id>/dependencies')
+@login_required
+def job_dependencies(job_id):
+    """
+    Displays the dependency management page for ONE specific job.
+    """
+    # Get the specific job we are editing
+    job = db.session.get(Job, job_id)
+    if not job:
+        flash('Job not found', 'danger')
+        return redirect(url_for('jobs_bp.job_list'))
     
-    return render_template('jobs/dependencies.html', jobs=jobs_data)
-
-
+    # Get all other jobs that could be a potential dependency
+    potential_dependencies = Job.query.filter(Job.id != job.id).order_by(Job.name).all()
+    
+    # Pass the correct variables to the template
+    return render_template(
+        'jobs/dependencies.html', 
+        job=job, 
+        potential_dependencies=potential_dependencies
+    )
 
 @jobs_bp.route('/dashboard')
 @login_required
@@ -190,6 +208,75 @@ def add_job():
 # ##### Die alte edit_job Route wird entfernt, da ihre Logik jetzt in job_details ist #####
 # @jobs_bp.route('/edit/<int:job_id>', methods=['GET', 'POST'])
 # ... (ganze Funktion gelöscht) ...
+@jobs_bp.route('/dependencies/add', methods=['POST'])
+def add_dependency():
+    try:
+        data = request.get_json()
+        job_id = data.get('job_id')
+        depends_on_id = data.get('depends_on_id')
+        dep_type_str = data.get('type', 'finish_to_start')
+
+        if not all([job_id, depends_on_id]):
+            return jsonify({'success': False, 'error': 'Fehlende Job-IDs'}), 400
+
+        job = db.session.get(Job, int(job_id))
+        depends_on_job = db.session.get(Job, int(depends_on_id))
+
+        if not job or not depends_on_job:
+            return jsonify({'success': False, 'error': 'Job nicht gefunden'}), 404
+        
+        # Verhindere zirkuläre Abhängigkeiten
+        if depends_on_job in job.get_all_dependencies():
+             return jsonify({'success': False, 'error': f'Zirkuläre Abhängigkeit! Job {depends_on_job.name} ist bereits von {job.name} abhängig.'}), 400
+
+        existing_dep = JobDependency.query.filter_by(job_id=job.id, depends_on_job_id=depends_on_job.id).first()
+        if existing_dep:
+            return jsonify({'success': False, 'error': 'Diese Abhängigkeit existiert bereits'}), 409
+
+        dep_type = DependencyType[dep_type_str.upper()]
+        
+        new_dependency = JobDependency(
+            job_id=job.id,
+            depends_on_job_id=depends_on_job.id,
+            dependency_type=dep_type
+        )
+        db.session.add(new_dependency)
+        db.session.commit()
+        
+        # WICHTIG: Gib immer eine JSON-Antwort zurück
+        return jsonify({
+            'success': True, 
+            'message': 'Abhängigkeit erfolgreich hinzugefügt.',
+            'dependency': {
+                'id': new_dependency.id,
+                'depends_on_name': depends_on_job.name,
+                'type': new_dependency.dependency_type.value
+            }
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        # Auch im Fehlerfall eine JSON-Antwort senden
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@jobs_bp.route('/dependencies/remove/<int:dependency_id>', methods=['DELETE'])
+def remove_dependency(dependency_id):
+    try:
+        dependency = db.session.get(JobDependency, dependency_id)
+        if not dependency:
+            return jsonify({'success': False, 'error': 'Abhängigkeit nicht gefunden'}), 404
+
+        db.session.delete(dependency)
+        db.session.commit()
+        
+        # WICHTIG: Gib immer eine JSON-Antwort zurück
+        return jsonify({'success': True, 'message': 'Abhängigkeit erfolgreich entfernt.'})
+
+    except Exception as e:
+        db.session.rollback()
+        # Auch im Fehlerfall eine JSON-Antwort senden
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @jobs_bp.route('/delete/<int:job_id>', methods=['POST'])

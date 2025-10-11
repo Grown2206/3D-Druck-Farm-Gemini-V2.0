@@ -436,6 +436,9 @@ class Job(db.Model):
     is_on_critical_path = db.Column(db.Boolean, default=False, nullable=False)
     estimated_start_time = db.Column(db.DateTime, nullable=True)
     estimated_end_time = db.Column(db.DateTime, nullable=True)
+    estimated_print_duration_s = db.Column(db.Integer, nullable=True)
+    estimated_material_g = db.Column(db.Float, nullable=True) 
+    complexity_score = db.Column(db.Integer, nullable=True)  # 1-10
     
     # Relationships (KORRIGIERT!)
     assigned_printer = db.relationship('Printer', foreign_keys=[printer_id], back_populates='jobs')
@@ -532,6 +535,39 @@ class Job(db.Model):
             progress = (elapsed / total) * 100
             return min(100, progress)
         return 0
+    
+    @property
+    def estimated_print_hours(self):
+        """Druckzeit in Stunden für bessere Lesbarkeit."""
+        if self.estimated_print_duration_s:
+            return self.estimated_print_duration_s / 3600
+        return None
+    
+    @property
+    def can_start_planning(self):
+        """Prüft ob Job genug Daten für Planung hat."""
+        return (
+            self.estimated_print_duration_s is not None and
+            self.required_filament_type_id is not None
+        )
+    
+    def get_scheduler_weight(self):
+        """Berechnet Gewichtung für Scheduler-Algorithmus."""
+        base_weight = self.priority * 10
+        
+        if self.deadline:
+            # Erhöhe Gewichtung bei naher Deadline
+            days_left = (self.deadline - datetime.datetime.utcnow()).days
+            if days_left <= 1:
+                base_weight *= 3
+            elif days_left <= 3:
+                base_weight *= 2
+        
+        if self.complexity_score:
+            # Komplexe Jobs früher einplanen
+            base_weight += self.complexity_score
+        
+        return base_weight
 
 class PrintSnapshot(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -903,8 +939,9 @@ class CostCalculation(db.Model):
     total_price = db.Column(db.Float)
     filament_type = db.relationship('FilamentType')
     printer = db.relationship('Printer')
-    job_id = db.Column(db.Integer, db.ForeignKey('job.id'), nullable=False)
-
+    job_id = db.Column(db.Integer, db.ForeignKey('job.id'), nullable=True) # <-- HIER ÄNDERN
+    
+    
 class ToDo(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     description = db.Column(db.Text, nullable=False)
