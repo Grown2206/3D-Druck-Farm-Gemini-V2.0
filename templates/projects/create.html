@@ -1,0 +1,253 @@
+{% extends "base.html" %}
+
+{% block title %}Neues Projekt{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h4><i class="bi bi-folder-plus"></i> Neues Projekt erstellen</h4>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="/projects/create">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                        <input type="text" name="name" required>
+                        <button type="submit">Erstellen</button>
+                    </form>
+                    
+                    
+                    
+                    
+                        <!-- Projektname -->
+                        <div class="mb-3">
+                            <label for="name" class="form-label">
+                                Projektname <span class="text-danger">*</span>
+                            </label>
+                            <input type="text" class="form-control" id="name" name="name" 
+                                   required placeholder="z.B. Prototyp Serie A">
+                            <small class="form-text text-muted">
+                                Eindeutiger Name für dieses Projekt
+                            </small>
+                        </div>
+                        <!-- Diese Felder in templates/jobs/create_job.html NACH dem Namen-Feld einfügen -->
+
+                        <!-- Projekt-Zuordnung -->
+                        <div class="mb-3">
+                            <label for="project_id" class="form-label">
+                                <i class="bi bi-folder"></i> Projekt (optional)
+                            </label>
+                            <select class="form-select" id="project_id" name="project_id">
+                                <option value="">Kein Projekt</option>
+                                {% for project in projects %}
+                                <option value="{{ project.id }}">
+                                    {{ project.name }} 
+                                    {% if project.deadline %}(Deadline: {{ project.deadline.strftime('%d.%m.%Y') }}){% endif %}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <small class="form-text text-muted">
+                                Ordne diesen Job einem Projekt zu für Multi-Part Jobs
+                            </small>
+                        </div>
+
+                        <!-- Job-Deadline -->
+                        <div class="mb-3">
+                            <label for="deadline" class="form-label">
+                                <i class="bi bi-calendar-event"></i> Job-Deadline (optional)
+                            </label>
+                            <input type="datetime-local" class="form-control" id="deadline" name="deadline">
+                            <small class="form-text text-muted">
+                                Wann muss dieser spezifische Job fertig sein?
+                            </small>
+                        </div>
+
+                        <!-- Priorität (erweitert) -->
+                        <div class="mb-3">
+                            <label for="priority" class="form-label">
+                                <i class="bi bi-flag"></i> Manuelle Priorität
+                            </label>
+                            <select class="form-select" id="priority" name="priority">
+                                <option value="1">Niedrig (1)</option>
+                                <option value="3">Normal (3)</option>
+                                <option value="5" selected>Mittel (5)</option>
+                                <option value="7">Hoch (7)</option>
+                                <option value="10">Sehr hoch (10)</option>
+                            </select>
+                            <small class="form-text text-muted">
+                                Die finale Priorität wird automatisch basierend auf Deadline, kritischem Pfad und dieser Einstellung berechnet
+                            </small>
+                        </div>
+
+                        <!-- Abhängigkeiten (nur bei Bearbeitung sichtbar) -->
+                        {% if job %}
+                        <div class="mb-3">
+                            <label class="form-label">
+                                <i class="bi bi-diagram-3"></i> Abhängigkeiten
+                            </label>
+                            <div id="dependencies-container">
+                                <!-- Wird via JavaScript gefüllt -->
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="showAddDependencyModal()">
+                                <i class="bi bi-plus"></i> Abhängigkeit hinzufügen
+                            </button>
+                        </div>
+                        {% endif %}
+
+                        <!-- Info-Box -->
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i>
+                            <strong>Tipp:</strong> Die automatische Priorisierung berücksichtigt:
+                            <ul class="mb-0 mt-2">
+                                <li>Deadline-Dringlichkeit (bis zu 50 Punkte)</li>
+                                <li>Deine manuelle Priorität (bis zu 25 Punkte)</li>
+                                <li>Kritischer Pfad (25 Punkte wenn zutreffend)</li>
+                                <li>Projekt-Deadline (bis zu 10 Punkte)</li>
+                            </ul>
+                        </div>
+
+                        <script>
+                        // Deadline-Warnung wenn Projekt-Deadline überschritten wird
+                        document.getElementById('project_id')?.addEventListener('change', function() {
+                            const projectSelect = this;
+                            const deadlineInput = document.getElementById('deadline');
+                            
+                            if (projectSelect.value && projectSelect.selectedOptions[0].text.includes('Deadline:')) {
+                                const projectDeadlineText = projectSelect.selectedOptions[0].text.match(/Deadline: (.+)\)/)[1];
+                                alert(`⚠️ Beachte: Das Projekt hat eine Deadline am ${projectDeadlineText}.\n\nStelle sicher dass die Job-Deadline VOR der Projekt-Deadline liegt!`);
+                            }
+                        });
+                        </script>
+
+                        <!-- Abhängigkeits-Modal (für Edit-Modus) -->
+                        {% if job %}
+                        <div class="modal fade" id="addDependencyModal" tabindex="-1">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title">Abhängigkeit hinzufügen</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <div class="mb-3">
+                                            <label class="form-label">Job hängt ab von:</label>
+                                            <select class="form-select" id="depends_on_job_id">
+                                                <option value="">Job auswählen...</option>
+                                                {% for other_job in available_jobs %}
+                                                {% if other_job.id != job.id %}
+                                                <option value="{{ other_job.id }}">{{ other_job.name }}</option>
+                                                {% endif %}
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">Typ:</label>
+                                            <select class="form-select" id="dependency_type">
+                                                <option value="finish_to_start">Finish-to-Start (Standard)</option>
+                                                <option value="start_to_start">Start-to-Start</option>
+                                            </select>
+                                            <small class="text-muted">
+                                                <strong>Finish-to-Start:</strong> Dieser Job startet erst wenn der andere fertig ist<br>
+                                                <strong>Start-to-Start:</strong> Dieser Job startet wenn der andere startet
+                                            </small>
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                                        <button type="button" class="btn btn-primary" onclick="addDependency()">Hinzufügen</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <script>
+                        function showAddDependencyModal() {
+                            new bootstrap.Modal(document.getElementById('addDependencyModal')).show();
+                        }
+
+                        function addDependency() {
+                            const dependsOnId = document.getElementById('depends_on_job_id').value;
+                            const depType = document.getElementById('dependency_type').value;
+                            
+                            if (!dependsOnId) {
+                                alert('Bitte wähle einen Job aus!');
+                                return;
+                            }
+                            
+                            fetch(`/api/job/{{ job.id }}/dependencies`, {
+                                method: 'POST',
+                                headers: {'Content-Type': 'application/json'},
+                                body: JSON.stringify({
+                                    depends_on_job_id: parseInt(dependsOnId),
+                                    type: depType
+                                })
+                            })
+                            .then(response => response.json())
+                            .then(data => {
+                                if (data.success) {
+                                    alert('✓ Abhängigkeit hinzugefügt!');
+                                    location.reload();
+                                } else {
+                                    alert('❌ Fehler: ' + data.error);
+                                }
+                            });
+                        }
+                        </script>
+                        {% endif %}
+                        <!-- Beschreibung -->
+                        <div class="mb-3">
+                            <label for="description" class="form-label">Beschreibung</label>
+                            <textarea class="form-control" id="description" name="description" 
+                                      rows="3" placeholder="Optionale Projektbeschreibung..."></textarea>
+                        </div>
+
+                        <!-- Deadline -->
+                        <div class="mb-3">
+                            <label for="deadline" class="form-label">
+                                Projekt-Deadline
+                            </label>
+                            <input type="datetime-local" class="form-control" id="deadline" name="deadline">
+                            <small class="form-text text-muted">
+                                Wann muss das gesamte Projekt fertig sein?
+                            </small>
+                        </div>
+
+                        <!-- Farbe -->
+                        <div class="mb-3">
+                            <label for="color" class="form-label">Farbe</label>
+                            <div class="input-group">
+                                <input type="color" class="form-control form-control-color" 
+                                       id="color" name="color" value="#0d6efd">
+                                <span class="input-group-text">Wird in Gantt-Charts verwendet</span>
+                            </div>
+                        </div>
+
+                        <!-- Buttons -->
+                        <div class="d-flex justify-content-between">
+                            <a href="{{ url_for('projects_bp.list_projects') }}" class="btn btn-secondary">
+                                <i class="bi bi-arrow-left"></i> Zurück
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-check-circle"></i> Projekt erstellen
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Hilfe-Box -->
+            <div class="card mt-3">
+                <div class="card-body">
+                    <h6><i class="bi bi-lightbulb"></i> Tipp: Multi-Part Jobs</h6>
+                    <p class="mb-0 small">
+                        Nutze Projekte um zusammengehörige Jobs zu gruppieren. 
+                        Nach der Erstellung kannst du Jobs diesem Projekt zuweisen und 
+                        Abhängigkeiten zwischen ihnen definieren.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

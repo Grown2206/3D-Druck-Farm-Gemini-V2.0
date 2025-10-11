@@ -1,6 +1,6 @@
 # routes/services.py
 from flask import flash, has_request_context, current_app
-from models import CostCalculation,  db, Job, Printer, JobStatus, JobQuality, PrinterStatus, FilamentSpool, PrinterStatusLog
+from models import db, Job, Printer, JobStatus, JobQuality, PrinterStatus, FilamentSpool, PrinterStatusLog
 import datetime
 from extensions import socketio 
 
@@ -47,45 +47,29 @@ def _update_printer_stats(job):
     pass
 
 def _calculate_and_set_job_costs(job):
-    '''
-    Berechnet Kosten für einen Job und speichert sie in job.actual_cost.
-    Nutzt CostCalculation wenn vorhanden, sonst einfache Berechnung.
-    '''
+    #... (unverändert)
     if not job or not job.end_time or not job.start_time:
         return
-    
-    # Materialkosten
-    material_cost = 0.0
-    if (job.gcode_file and job.gcode_file.material_needed_g and 
-        job.required_filament_type and job.required_filament_type.cost_per_spool and 
-        job.required_filament_type.spool_weight_g and job.required_filament_type.spool_weight_g > 0):
+    job.material_cost = 0.0
+    if job.gcode_file and job.gcode_file.material_needed_g and job.required_filament_type and job.required_filament_type.cost_per_spool and job.required_filament_type.spool_weight_g and job.required_filament_type.spool_weight_g > 0:
         material_cost_per_g = job.required_filament_type.cost_per_spool / job.required_filament_type.spool_weight_g
-        material_cost = job.gcode_file.material_needed_g * material_cost_per_g
-    
-    # Maschinenkosten
-    machine_cost = 0.0
+        job.material_cost = job.gcode_file.material_needed_g * material_cost_per_g
+    job.machine_cost = 0.0
     if job.assigned_printer:
         duration_hours = (job.end_time - job.start_time).total_seconds() / 3600
         cost_per_hour = job.assigned_printer.calculated_cost_per_hour or job.assigned_printer.cost_per_hour or 0
-        
         energy_cost = 0.0
         if job.assigned_printer.power_consumption_w and job.assigned_printer.energy_price_kwh:
             power_kw = job.assigned_printer.power_consumption_w / 1000
             energy_cost = power_kw * duration_hours * job.assigned_printer.energy_price_kwh
+        job.machine_cost = (duration_hours * cost_per_hour) + energy_cost
+    job.personnel_cost = 0.0
+    
+    if job.employee_hourly_rate:
+        total_manual_time_hours = ((job.preparation_time_min or 0) + (job.post_processing_time_min or 0)) / 60
+        job.personnel_cost = total_manual_time_hours * job.employee_hourly_rate
         
-        machine_cost = (duration_hours * cost_per_hour) + energy_cost
-    
-    # Personalkosten (aus CostCalculation wenn vorhanden)
-    personnel_cost = 0.0
-    cost_calc = CostCalculation.query.filter_by(job_id=job.id).first()
-    if cost_calc and cost_calc.employee_hourly_rate:
-        total_manual_time_hours = ((cost_calc.preparation_time_min or 0) + 
-                                   (cost_calc.post_processing_time_min or 0)) / 60
-        personnel_cost = total_manual_time_hours * cost_calc.employee_hourly_rate
-    
-    # Gesamtkosten in job.actual_cost speichern
-    job.actual_cost = material_cost + machine_cost + personnel_cost
-
+    job.total_cost = (job.material_cost or 0) + (job.machine_cost or 0) + (job.personnel_cost or 0)
 
 def _deduct_filament_from_spool(job):
     #... (unverändert)

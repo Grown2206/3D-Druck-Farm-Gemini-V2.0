@@ -63,7 +63,10 @@ database.db
 instance/
 *.sqlite3
 
-
+# Backup-Dateien in .gitignore
+echo "*.backup*" >> .gitignore
+git add .gitignore
+git commit -m "Update .gitignore for backup files"
 # IDEs und Systemdateien
 ################################################################
 # VSCode

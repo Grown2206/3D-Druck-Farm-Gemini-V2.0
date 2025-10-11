@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+
+{% block title %}Projekt bearbeiten{% endblock %}
+
+{% block content %}
+<div class="main-header">
+    <h1><i class="bi bi-pencil-square"></i> Projekt bearbeiten</h1>
+    <div class="header-actions">
+        <a href="{{ url_for('projects_bp.view_project', project_id=project.id) if project else '#' }}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left"></i> Zurück
+        </a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h5>Projektdetails bearbeiten</h5>
+    </div>
+    <div class="card-body">
+        <form method="POST" action="{{ url_for('projects_bp.edit_project', project_id=project.id) if project else '#' }}">
+            <!-- KRITISCH: CSRF-Token -->
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            
+            <div class="mb-3">
+                <label for="name" class="form-label">Projektname <span class="text-danger">*</span></label>
+                <input type="text" id="name" name="name" class="form-control" 
+                       value="{{ project.name if project else '' }}" required>
+            </div>
+            
+            <div class="mb-3">
+                <label for="description" class="form-label">Beschreibung</label>
+                <textarea id="description" name="description" class="form-control" rows="4">{{ project.description if project else '' }}</textarea>
+            </div>
+            
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="deadline" class="form-label">Deadline</label>
+                    <input type="date" id="deadline" name="deadline" class="form-control"
+                           value="{{ project.deadline.strftime('%Y-%m-%d') if project and project.deadline else '' }}">
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="priority" class="form-label">Priorität</label>
+                    <select id="priority" name="priority" class="form-select">
+                        <option value="1" {{ 'selected' if project and project.priority == 1 else '' }}>Niedrig</option>
+                        <option value="2" {{ 'selected' if project and project.priority == 2 else '' }}>Normal</option>
+                        <option value="3" {{ 'selected' if project and project.priority == 3 else '' }}>Hoch</option>
+                        <option value="4" {{ 'selected' if project and project.priority == 4 else '' }}>Kritisch</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="mb-3">
+                <label for="status" class="form-label">Status</label>
+                <select id="status" name="status" class="form-select">
+                    <option value="planning" {{ 'selected' if project and project.status == 'planning' else '' }}>Planung</option>
+                    <option value="active" {{ 'selected' if project and project.status == 'active' else '' }}>Aktiv</option>
+                    <option value="paused" {{ 'selected' if project and project.status == 'paused' else '' }}>Pausiert</option>
+                    <option value="completed" {{ 'selected' if project and project.status == 'completed' else '' }}>Abgeschlossen</option>
+                    <option value="cancelled" {{ 'selected' if project and project.status == 'cancelled' else '' }}>Abgebrochen</option>
+                </select>
+            </div>
+            
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-check-lg"></i> Änderungen speichern
+                </button>
+                <a href="{{ url_for('projects_bp.view_project', project_id=project.id) if project else url_for('projects_bp.list') }}" class="btn btn-secondary">
+                    Abbrechen
+                </a>
+                {% if project %}
+                <button type="button" class="btn btn-danger ms-auto" data-bs-toggle="modal" data-bs-target="#deleteProjectModal">
+                    <i class="bi bi-trash"></i> Projekt löschen
+                </button>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+{% if project %}
+<!-- Lösch-Bestätigung Modal -->
+<div class="modal fade" id="deleteProjectModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Projekt löschen</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Möchten Sie das Projekt <strong>"{{ project.name }}"</strong> wirklich löschen?</p>
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    Diese Aktion kann nicht rückgängig gemacht werden!
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                <form method="POST" action="{{ url_for('projects_bp.delete_project', project_id=project.id) }}" class="d-inline">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <button type="submit" class="btn btn-danger">
+                        <i class="bi bi-trash"></i> Endgültig löschen
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

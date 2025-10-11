@@ -1,0 +1,309 @@
+{% extends "base.html" %}
+
+{% block title %}{{ project.name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2>
+                <i class="bi bi-folder-fill" style="color: {{ project.color }}"></i>
+                {{ project.name }}
+                {% if project.deadline_status %}
+                <span class="badge bg-{{ project.deadline_status.value }}">
+                    {{ project.deadline_status.value|upper }}
+                </span>
+                {% endif %}
+            </h2>
+            <p class="text-muted">{{ project.description or 'Keine Beschreibung' }}</p>
+        </div>
+        <div>
+            <a href="{{ url_for('projects_bp.list_projects') }}" class="btn btn-secondary">
+                <i class="bi bi-arrow-left"></i> Zurück
+            </a>
+            <a href="{{ url_for('projects_bp.edit_project', project_id=project.id) }}" class="btn btn-warning">
+                <i class="bi bi-pencil"></i> Bearbeiten
+            </a>
+            <button class="btn btn-primary" onclick="recalculatePriorities()">
+                <i class="bi bi-arrow-repeat"></i> Neu berechnen
+            </button>
+        </div>
+    </div>
+
+    <!-- Info Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h6 class="text-muted">Fortschritt</h6>
+                    <h2 class="mb-0">{{ project.completion_percentage }}%</h2>
+                    <div class="progress mt-2" style="height: 10px;">
+                        <div class="progress-bar bg-success" style="width: {{ project.completion_percentage }}%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h6 class="text-muted">Gesamt-Jobs</h6>
+                    <h2 class="mb-0">{{ stats.total_jobs }}</h2>
+                    <small class="text-muted">{{ stats.completed }} abgeschlossen</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card {% if project.deadline %}border-{{ project.deadline_status.value if project.deadline_status else 'secondary' }}{% endif %}">
+                <div class="card-body text-center">
+                    <h6 class="text-muted">Deadline</h6>
+                    {% if project.deadline %}
+                    <h5 class="mb-0">{{ project.deadline.strftime('%d.%m.%Y') }}</h5>
+                    <small>{{ project.deadline.strftime('%H:%M') }} Uhr</small>
+                    {% else %}
+                    <h5 class="mb-0 text-muted">Keine Deadline</h5>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-danger">
+                <div class="card-body text-center">
+                    <h6 class="text-muted">Kritischer Pfad</h6>
+                    <h2 class="mb-0 text-danger">{{ stats.critical_path_jobs }}</h2>
+                    <small class="text-muted">Jobs auf krit. Pfad</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Gantt-Chart -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5>
+                <i class="bi bi-graph-up"></i>
+                Projekt-Timeline mit kritischem Pfad
+            </h5>
+            <div class="mt-2">
+                <span class="badge bg-danger me-2"><i class="bi bi-diamond-fill"></i> Kritischer Pfad</span>
+                <span class="badge me-2" style="background: #ff6384"><i class="bi bi-exclamation-triangle"></i> Dringende Deadline</span>
+                <span class="badge me-2" style="background: #36a2eb"><i class="bi bi-play-fill"></i> Laufend</span>
+                <span class="badge" style="background: #4bc0c0"><i class="bi bi-clock"></i> Geplant</span>
+            </div>
+        </div>
+        <div class="card-body">
+            <div id="gantt-chart" style="height: 500px;"></div>
+        </div>
+    </div>
+
+    <!-- Job-Liste -->
+    <div class="card">
+        <div class="card-header">
+            <h5><i class="bi bi-list-task"></i> Job-Liste</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Job</th>
+                            <th>Status</th>
+                            <th>Priorität</th>
+                            <th>Deadline</th>
+                            <th>Abhängigkeiten</th>
+                            <th>Kritisch</th>
+                            <th>Drucker</th>
+                            <th>Aktionen</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for job in jobs %}
+                        <tr class="{% if job.is_on_critical_path %}table-danger{% endif %}">
+                            <td>
+                                <strong>{{ job.name }}</strong>
+                                {% if job.parent_job %}
+                                <br><small class="text-muted">↳ Teil von {{ job.parent_job.name }}</small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge bg-{% if job.status.name == 'COMPLETED' %}success{% elif job.status.name == 'PRINTING' %}primary{% else %}secondary{% endif %}">
+                                    {{ job.status.value }}
+                                </span>
+                            </td>
+                            <td>
+                                <span class="badge bg-info">{{ job.priority_score|round(1) }}</span>
+                            </td>
+                            <td>
+                                {% if job.deadline %}
+                                <span class="badge bg-{{ job.deadline_status.value if job.deadline_status else 'secondary' }}">
+                                    {{ job.deadline.strftime('%d.%m %H:%M') }}
+                                </span>
+                                {% if job.hours_until_deadline is not none %}
+                                <br><small class="text-muted">{{ job.hours_until_deadline|round(1) }}h</small>
+                                {% endif %}
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if job.dependencies %}
+                                <button class="btn btn-sm btn-outline-secondary" 
+                                        onclick="showDependencies({{ job.id }})">
+                                    <i class="bi bi-diagram-3"></i> {{ job.dependencies|length }}
+                                </button>
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                {% if job.is_on_critical_path %}
+                                <i class="bi bi-exclamation-triangle-fill text-danger" title="Auf kritischem Pfad"></i>
+                                {% else %}
+                                <i class="bi bi-check-circle text-muted"></i>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if job.assigned_printer %}
+                                <small>{{ job.assigned_printer.name }}</small>
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <a href="{{ url_for('jobs_bp.job_details', job_id=job.id) }}" 
+                                   class="btn btn-sm btn-primary">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ApexCharts -->
+<script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+
+<script>
+// Gantt-Chart laden
+document.addEventListener('DOMContentLoaded', function() {
+    fetch("{{ url_for('projects_bp.project_gantt', project_id=project.id) }}")
+        .then(response => response.json())
+        .then(data => {
+            const options = {
+                series: data,
+                chart: {
+                    type: 'rangeBar',
+                    height: 500,
+                    toolbar: { 
+                        show: true,
+                        tools: {
+                            download: true,
+                            zoom: true,
+                            pan: true,
+                            reset: true
+                        }
+                    }
+                },
+                plotOptions: {
+                    bar: {
+                        horizontal: true,
+                        rangeBarGroupRows: true,
+                        barHeight: '80%'
+                    }
+                },
+                xaxis: {
+                    type: 'datetime',
+                    labels: {
+                        datetimeFormatter: {
+                            year: 'yyyy',
+                            month: 'MMM yyyy',
+                            day: 'dd MMM',
+                            hour: 'HH:mm'
+                        }
+                    }
+                },
+                yaxis: {
+                    labels: {
+                        style: {
+                            fontSize: '12px'
+                        }
+                    }
+                },
+                tooltip: {
+                    custom: function({seriesIndex, dataPointIndex, w}) {
+                        const data = w.config.series[seriesIndex].data[dataPointIndex];
+                        const start = new Date(data.y[0]);
+                        const end = new Date(data.y[1]);
+                        const duration = ((end - start) / 1000 / 3600).toFixed(1);
+                        
+                        let html = '<div class="p-3">';
+                        html += `<strong>${data.x}</strong><br>`;
+                        html += `Start: ${start.toLocaleString('de-DE')}<br>`;
+                        html += `Ende: ${end.toLocaleString('de-DE')}<br>`;
+                        html += `Dauer: ${duration}h<br>`;
+                        
+                        if (data.is_critical) {
+                            html += '<span class="badge bg-danger">Kritischer Pfad</span> ';
+                        }
+                        if (data.deadline_status) {
+                            html += `<span class="badge bg-${data.deadline_status}">${data.deadline_status.toUpperCase()}</span>`;
+                        }
+                        
+                        html += '</div>';
+                        return html;
+                    }
+                },
+                legend: {
+                    show: false
+                }
+            };
+            
+            const chart = new ApexCharts(document.querySelector("#gantt-chart"), options);
+            chart.render();
+        })
+        .catch(error => {
+            console.error('Fehler beim Laden des Gantt-Charts:', error);
+            document.querySelector("#gantt-chart").innerHTML = 
+                '<div class="alert alert-warning">Gantt-Chart konnte nicht geladen werden.</div>';
+        });
+});
+
+function showDependencies(jobId) {
+    fetch(`/api/job/${jobId}/dependencies`)
+        .then(response => response.json())
+        .then(deps => {
+            let html = '<ul class="list-group">';
+            deps.forEach(dep => {
+                const icon = dep.is_blocking ? '🔴' : '✅';
+                html += `<li class="list-group-item">${icon} ${dep.depends_on_job_name} (${dep.type})</li>`;
+            });
+            html += '</ul>';
+            
+            alert('Abhängigkeiten:\n\n' + deps.map(d => 
+                `${d.is_blocking ? '🔴' : '✅'} ${d.depends_on_job_name} (${d.type})`
+            ).join('\n'));
+        });
+}
+
+function recalculatePriorities() {
+    if (confirm('Kritischen Pfad und Prioritäten neu berechnen?')) {
+        fetch(`{{ url_for('projects_bp.recalculate_project', project_id=project.id) }}`, {
+            method: 'POST'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(`✓ Berechnung erfolgreich!\n${data.critical_jobs_count} Jobs auf kritischem Pfad.`);
+                location.reload();
+            } else {
+                alert('Fehler: ' + data.error);
+            }
+        });
+    }
+}
+</script>
+{% endblock %}

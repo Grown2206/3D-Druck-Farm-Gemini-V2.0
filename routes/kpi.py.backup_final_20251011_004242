@@ -272,9 +272,9 @@ def dashboard():
     avg_duration_failed = db.session.query(func.avg(Job.actual_print_duration_s)).filter(Job.quality_assessment == JobQuality.FAILED, Job.actual_print_duration_s.isnot(None)).scalar() or 0
 
     total_costs = db.session.query(
-        func.sum(CostCalculation.material_cost),
-        func.sum(CostCalculation.machine_cost),
-        func.sum(CostCalculation.personnel_cost)
+        func.sum(Job.material_cost),
+        func.sum(Job.machine_cost),
+        func.sum(Job.personnel_cost)
     ).filter(Job.status == JobStatus.COMPLETED).first()
     
     cost_chart_data = {
@@ -417,7 +417,7 @@ def dashboard():
     roi_data = []
     for printer in printers:
         if printer.purchase_cost and printer.purchase_cost > 0:
-            printer_total_cost = db.session.query(func.sum(Job.actual_cost)).filter(
+            printer_total_cost = db.session.query(func.sum(Job.total_cost)).filter(
                 Job.printer_id == printer.id,
                 Job.status == JobStatus.COMPLETED
             ).scalar() or 0
@@ -436,7 +436,7 @@ def dashboard():
     # Monatliche Kostenentwicklung
     monthly_costs = db.session.query(
         func.strftime('%Y-%m', Job.completed_at).label('month'),
-        func.sum(Job.actual_cost)
+        func.sum(Job.total_cost)
     ).filter(
         Job.completed_at >= thirty_days_ago,
         Job.status == JobStatus.COMPLETED

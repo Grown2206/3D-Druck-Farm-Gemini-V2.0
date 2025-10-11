@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+
+{% block title %}Auftragskalender{% endblock %}
+
+{% block head_extra %}
+<!-- FullCalendar CSS -->
+<link href='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/main.min.css' rel='stylesheet' />
+<style>
+    .fc-event {
+        cursor: pointer;
+    }
+    .fc-event-critical {
+        border-left: 4px solid #dc3545 !important;
+    }
+    .calendar-container {
+        background: var(--bs-dark);
+        border-radius: 0.5rem;
+        padding: 1rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="main-header">
+    <h1><i class="bi bi-calendar3"></i> Auftragskalender</h1>
+    <div class="header-actions">
+        <a href="{{ url_for('jobs_bp.list_jobs') }}" class="btn btn-outline-light">
+            <i class="bi bi-list"></i> Zurück zur Liste
+        </a>
+    </div>
+</div>
+
+<!-- Legende -->
+<div class="row mb-3">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <h6>Legende:</h6>
+                <div class="d-flex flex-wrap gap-3">
+                    <span><i class="bi bi-square-fill text-primary"></i> Geplant</span>
+                    <span><i class="bi bi-square-fill text-success"></i> Läuft</span>
+                    <span><i class="bi bi-square-fill text-secondary"></i> Abgeschlossen</span>
+                    <span><i class="bi bi-square-fill text-danger"></i> Kritischer Pfad</span>
+                    <span><i class="bi bi-square-fill" style="color: #ff6384;"></i> Deadline gefährdet</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Kalender -->
+<div class="row">
+    <div class="col-12">
+        <div class="calendar-container">
+            <div id="calendar"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Job Details Modal -->
+<div class="modal fade" id="jobModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="jobModalTitle">Auftragsdetails</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="jobModalBody">
+                <!-- Wird via JavaScript gefüllt -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Schließen</button>
+                <a href="#" id="jobDetailsLink" class="btn btn-primary">Details anzeigen</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block body_scripts %}
+<!-- FullCalendar JS -->
+<script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/main.min.js'></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const calendarEl = document.getElementById('calendar');
+    
+    const calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'dayGridMonth',
+        headerToolbar: {
+            left: 'prev,next today',
+            center: 'title',
+            right: 'dayGridMonth,timeGridWeek,timeGridDay'
+        },
+        
+        // Events von unserer API laden
+        events: '{{ url_for("api_bp.jobs_calendar") }}',
+        
+        // Event-Click Handler
+        eventClick: function(info) {
+            const event = info.event;
+            const props = event.extendedProps;
+            
+            // Modal-Titel setzen
+            document.getElementById('jobModalTitle').textContent = event.title;
+            
+            // Modal-Body füllen
+            const modalBody = document.getElementById('jobModalBody');
+            modalBody.innerHTML = `
+                <div class="row">
+                    <div class="col-sm-4"><strong>Status:</strong></div>
+                    <div class="col-sm-8"><span class="badge bg-info">${props.status}</span></div>
+                </div>
+                <div class="row mt-2">
+                    <div class="col-sm-4"><strong>Drucker:</strong></div>
+                    <div class="col-sm-8">${props.printer_name || 'Nicht zugewiesen'}</div>
+                </div>
+                <div class="row mt-2">
+                    <div class="col-sm-4"><strong>Projekt:</strong></div>
+                    <div class="col-sm-8">${props.project_name || 'Kein Projekt'}</div>
+                </div>
+                <div class="row mt-2">
+                    <div class="col-sm-4"><strong>Priorität:</strong></div>
+                    <div class="col-sm-8">${props.priority_score || 'Nicht definiert'}</div>
+                </div>
+                <div class="row mt-2">
+                    <div class="col-sm-4"><strong>Start:</strong></div>
+                    <div class="col-sm-8">${event.start.toLocaleString()}</div>
+                </div>
+                <div class="row mt-2">
+                    <div class="col-sm-4"><strong>Ende:</strong></div>
+                    <div class="col-sm-8">${event.end ? event.end.toLocaleString() : 'Offen'}</div>
+                </div>
+                ${props.is_critical ? '<div class="alert alert-warning mt-3"><i class="bi bi-exclamation-triangle"></i> Auf kritischem Pfad</div>' : ''}
+            `;
+            
+            // Details-Link setzen
+            document.getElementById('jobDetailsLink').href = `{{ url_for('jobs_bp.job_details', job_id=0) }}`.replace('0', event.id);
+            
+            // Modal anzeigen
+            new bootstrap.Modal(document.getElementById('jobModal')).show();
+        },
+        
+        // Responsive Design
+        height: 'auto',
+        aspectRatio: window.innerWidth < 768 ? 1 : 1.8,
+        
+        // Deutsche Lokalisierung
+        locale: 'de',
+        firstDay: 1, // Montag als erster Tag
+        
+        // Event-Styling basierend auf Properties
+        eventDidMount: function(info) {
+            const props = info.event.extendedProps;
+            if (props.is_critical) {
+                info.el.classList.add('fc-event-critical');
+            }
+        }
+    });
+    
+    calendar.render();
+    
+    // Responsive Anpassung
+    window.addEventListener('resize', function() {
+        calendar.updateSize();
+    });
+});
+</script>
+{% endblock %}
