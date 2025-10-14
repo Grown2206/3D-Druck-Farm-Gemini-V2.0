@@ -14,58 +14,36 @@ from sqlalchemy import or_
 
 jobs_bp = Blueprint('jobs_bp', __name__, url_prefix='/jobs')
 
-@jobs_bp.route('/dependencies')
-@login_required
-def manage_dependencies():
-    jobs = Job.query.filter(Job.is_archived == False).all()
-    
-    # Job-Objekte in serialisierbare Dictionaries umwandeln
-    jobs_data = []
-    for job in jobs:
-        jobs_data.append({
-            'id': job.id,
-            'name': job.name,
-            'status': job.status.value if job.status else '',
-            'priority': job.priority or 0,
-            'created_at': job.created_at.strftime('%Y-%m-%d') if job.created_at else '',
-            'printer_name': job.assigned_printer.name if job.assigned_printer else 'Nicht zugewiesen',
-            'project_name': job.project.name if job.project else '',
-            'dependencies': [
-                {
-                    'id': dep.id,
-                    'depends_on_job_id': dep.depends_on_job_id,
-                    'depends_on_job_name': dep.depends_on.name,
-                    'type': dep.dependency_type.value
-                } for dep in job.dependencies
-            ] if hasattr(job, 'dependencies') else [],
-            'dependents': [
-                {
-                    'id': dep.id,
-                    'dependent_job_id': dep.job_id,
-                    'dependent_job_name': dep.job.name,
-                    'type': dep.dependency_type.value
-                } for dep in job.dependents
-            ] if hasattr(job, 'dependents') else []
-        })
+
 @jobs_bp.route('/<int:job_id>/dependencies')
 @login_required
 def job_dependencies(job_id):
     """
-    Displays the dependency management page for ONE specific job.
+    Zeigt die Abhängigkeitsverwaltungsseite für einen spezifischen Job.
     """
-    # Get the specific job we are editing
     job = db.session.get(Job, job_id)
     if not job:
-        flash('Job not found', 'danger')
-        return redirect(url_for('jobs_bp.job_list'))
+        flash('Job nicht gefunden', 'danger')
+        return redirect(url_for('jobs_bp.list_jobs'))
     
-    # Get all other jobs that could be a potential dependency
-    potential_dependencies = Job.query.filter(Job.id != job.id).order_by(Job.name).all()
+    # Alle Jobs laden, die als potenzielle Abhängigkeiten in Frage kommen
+    # Ausschließen: 
+    # - Den aktuellen Job selbst
+    # - Jobs die bereits von diesem Job abhängen (um Zyklen zu vermeiden)
+    # - Archivierte Jobs
+    existing_dependency_ids = [dep.depends_on_job_id for dep in job.dependencies]
+    dependent_job_ids = [dep.job_id for dep in job.dependents]
     
-    # Pass the correct variables to the template
+    potential_dependencies = Job.query.filter(
+        Job.id != job_id,
+        ~Job.id.in_(existing_dependency_ids),
+        ~Job.id.in_(dependent_job_ids),
+        Job.is_archived == False
+    ).order_by(Job.name).all()
+    
     return render_template(
-        'jobs/dependencies.html', 
-        job=job, 
+        'jobs/dependencies.html',
+        job=job,
         potential_dependencies=potential_dependencies
     )
 
@@ -209,30 +187,38 @@ def add_job():
 # @jobs_bp.route('/edit/<int:job_id>', methods=['GET', 'POST'])
 # ... (ganze Funktion gelöscht) ...
 @jobs_bp.route('/dependencies/add', methods=['POST'])
+@login_required
 def add_dependency():
+    """
+    Fügt eine neue Job-Abhängigkeit hinzu.
+    Erwartet JSON mit: job_id, depends_on_id, type
+    """
     try:
         data = request.get_json()
         job_id = data.get('job_id')
         depends_on_id = data.get('depends_on_id')
         dep_type_str = data.get('type', 'finish_to_start')
 
+        # Validierung
         if not all([job_id, depends_on_id]):
-            return jsonify({'success': False, 'error': 'Fehlende Job-IDs'}), 400
+            return jsonify({'success': False, 'error': 'Job-IDs fehlen'}), 400
 
-        job = db.session.get(Job, int(job_id))
-        depends_on_job = db.session.get(Job, int(depends_on_id))
+        job = db.session.get(Job, job_id)
+        depends_on_job = db.session.get(Job, depends_on_id)
 
         if not job or not depends_on_job:
-            return jsonify({'success': False, 'error': 'Job nicht gefunden'}), 404
+            return jsonify({'success': False, 'error': 'Ein oder beide Jobs existieren nicht'}), 404
+
+        # Nutze den DependencyValidator für umfassende Validierung
+        from validators import DependencyValidator
+        is_valid, message = DependencyValidator.validate_dependency(
+            job_id, depends_on_id, db.session
+        )
         
-        # Verhindere zirkuläre Abhängigkeiten
-        if depends_on_job in job.get_all_dependencies():
-             return jsonify({'success': False, 'error': f'Zirkuläre Abhängigkeit! Job {depends_on_job.name} ist bereits von {job.name} abhängig.'}), 400
+        if not is_valid:
+            return jsonify({'success': False, 'error': message}), 400
 
-        existing_dep = JobDependency.query.filter_by(job_id=job.id, depends_on_job_id=depends_on_job.id).first()
-        if existing_dep:
-            return jsonify({'success': False, 'error': 'Diese Abhängigkeit existiert bereits'}), 409
-
+        # Erstelle die Abhängigkeit
         dep_type = DependencyType[dep_type_str.upper()]
         
         new_dependency = JobDependency(
@@ -243,7 +229,17 @@ def add_dependency():
         db.session.add(new_dependency)
         db.session.commit()
         
-        # WICHTIG: Gib immer eine JSON-Antwort zurück
+        # Aktualisiere ggf. Prioritäten und kritischen Pfad
+        if job.project:
+            from validators import CriticalPathCalculator, PriorityCalculator
+            try:
+                CriticalPathCalculator.calculate(job.project)
+                job.priority_score = PriorityCalculator.calculate_priority_score(job)
+                db.session.commit()
+            except Exception as e:
+                # Log-Fehler, aber Abhängigkeit bleibt bestehen
+                print(f"Warnung: Fehler bei Prioritätsberechnung: {e}")
+        
         return jsonify({
             'success': True, 
             'message': 'Abhängigkeit erfolgreich hinzugefügt.',
@@ -256,26 +252,40 @@ def add_dependency():
 
     except Exception as e:
         db.session.rollback()
-        # Auch im Fehlerfall eine JSON-Antwort senden
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @jobs_bp.route('/dependencies/remove/<int:dependency_id>', methods=['DELETE'])
+@login_required
 def remove_dependency(dependency_id):
+    """
+    Entfernt eine Job-Abhängigkeit.
+    """
     try:
         dependency = db.session.get(JobDependency, dependency_id)
         if not dependency:
             return jsonify({'success': False, 'error': 'Abhängigkeit nicht gefunden'}), 404
 
+        job_id = dependency.job_id
         db.session.delete(dependency)
         db.session.commit()
         
-        # WICHTIG: Gib immer eine JSON-Antwort zurück
+        # Aktualisiere ggf. Prioritäten und kritischen Pfad
+        job = db.session.get(Job, job_id)
+        if job and job.project:
+            from validators import CriticalPathCalculator, PriorityCalculator
+            try:
+                CriticalPathCalculator.calculate(job.project)
+                job.priority_score = PriorityCalculator.calculate_priority_score(job)
+                db.session.commit()
+            except Exception as e:
+                # Log-Fehler
+                print(f"Warnung: Fehler bei Prioritätsberechnung: {e}")
+        
         return jsonify({'success': True, 'message': 'Abhängigkeit erfolgreich entfernt.'})
 
     except Exception as e:
         db.session.rollback()
-        # Auch im Fehlerfall eine JSON-Antwort senden
         return jsonify({'success': False, 'error': str(e)}), 500
 
 

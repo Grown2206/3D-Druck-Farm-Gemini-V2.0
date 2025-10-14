@@ -12,8 +12,8 @@
     <script type="importmap">
         {
             "imports": {
-                "three": "https://unpkg.com/three@0.164.1/build/three.module.js",
-                "three/addons/": "https://unpkg.com/three@0.164.1/examples/jsm/"
+                "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
             }
         }
     </script>
@@ -46,9 +46,7 @@
                 <li><a href="{{ url_for('projects_bp.list_projects') }}" class="nav-link text-white"><i class="bi bi-folder-fill me-2"></i><span class="sidebar-text">Projekte</span></a></li>
                 <li><a href="{{ url_for('jobs_bp.calendar_view') }}" class="nav-link text-white"><i class="bi bi-calendar3 me-2"></i><span class="sidebar-text">Auftragskalender</span></a></li>
 
-                <li><a href="{{ url_for('jobs_bp.manage_dependencies') }}" class="nav-link text-white">
-                    <i class="bi bi-diagram-3 me-2"></i><span class="sidebar-text">Abhängigkeiten</span>
-                </a></li>
+                <!-- DIESE FEHLERHAFTE ZEILE WURDE ENTFERNT -->
 
                 <li class="nav-label sidebar-text mt-3"><small>VERWALTUNG</small></li>
                 <li>
@@ -245,3 +243,4 @@
     {% block scripts %}{% endblock %}
 </body>
 </html>
+

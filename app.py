@@ -31,7 +31,7 @@ def create_app():
 
     app = Flask(__name__, instance_relative_config=True)
     CORS(app)
-
+    
     # --- Konfiguration ---
     app.config.from_mapping(
         SECRET_KEY=os.environ.get('SECRET_KEY', 'dev'),

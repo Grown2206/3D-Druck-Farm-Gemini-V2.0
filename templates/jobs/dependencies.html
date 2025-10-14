@@ -9,13 +9,14 @@
             <div class="card shadow-sm">
                 <div class="card-header bg-light d-flex justify-content-between align-items-center">
                     <h4 class="mb-0">
-                        <i class="fas fa-project-diagram me-2"></i>Abhängigkeiten für Job: <strong>{{ job.name }}</strong>
+                        <i class="bi bi-diagram-3-fill me-2"></i>Abhängigkeiten für Job: <strong>{{ job.name }}</strong>
                     </h4>
                     <a href="{{ url_for('jobs_bp.job_details', job_id=job.id) }}" class="btn btn-sm btn-outline-secondary">
-                        <i class="fas fa-arrow-left me-1"></i>Zurück zu den Details
+                        <i class="bi bi-arrow-left me-1"></i>Zurück zu den Details
                     </a>
                 </div>
                 <div class="card-body">
+                    <!-- Formular zum Hinzufügen von Abhängigkeiten -->
                     <div class="card mb-4">
                         <div class="card-header">
                             Neue Abhängigkeit hinzufügen
@@ -41,7 +42,7 @@
                                     </div>
                                     <div class="col-md-2">
                                         <button type="submit" class="btn btn-primary w-100">
-                                            <i class="fas fa-plus me-1"></i>Hinzufügen
+                                            <i class="bi bi-plus-lg me-1"></i>Hinzufügen
                                         </button>
                                     </div>
                                 </div>
@@ -50,8 +51,9 @@
                         </div>
                     </div>
 
+                    <!-- Liste der bestehenden Abhängigkeiten -->
                     <h5>Bestehende Abhängigkeiten:</h5>
-                    <p>Dieser Job kann erst gestartet werden, wenn die folgenden Jobs abgeschlossen sind:</p>
+                    <p>Dieser Job kann erst gestartet werden, wenn die folgenden Jobs die Bedingung erfüllen:</p>
                     <ul class="list-group" id="dependency-list">
                         {% if job.dependencies %}
                             {% for dep in job.dependencies %}
@@ -61,7 +63,7 @@
                                         <small class="text-muted ms-2">({{ dep.dependency_type.value }})</small>
                                     </span>
                                     <button class="btn btn-sm btn-outline-danger remove-dependency-btn" data-id="{{ dep.id }}">
-                                        <i class="fas fa-trash-alt"></i>
+                                        <i class="bi bi-trash-fill"></i>
                                     </button>
                                 </li>
                             {% endfor %}
@@ -80,7 +82,6 @@ document.addEventListener('DOMContentLoaded', function () {
     const form = document.getElementById('add-dependency-form');
     const feedbackDiv = document.getElementById('form-feedback');
     const dependencyList = document.getElementById('dependency-list');
-    const noDependenciesLi = document.getElementById('no-dependencies');
 
     // Hinzufügen einer Abhängigkeit
     form.addEventListener('submit', async function (e) {
@@ -111,12 +112,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
             const data = await response.json();
 
-            if (data.success) {
+            if (response.ok) {
                 showAlert('Abhängigkeit erfolgreich hinzugefügt.', 'success');
                 addDependencyToList(data.dependency);
                 form.reset();
             } else {
-                showAlert(`Fehler: ${data.error || 'Unbekannter Fehler'}`, 'danger');
+                showAlert(`Fehler: ${data.error || 'Unbekannter Serverfehler'}`, 'danger');
             }
         } catch (error) {
             console.error('Fetch-Fehler:', error);
@@ -126,13 +127,16 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Entfernen einer Abhängigkeit
     dependencyList.addEventListener('click', async function(e) {
-        if (e.target.closest('.remove-dependency-btn')) {
-            const button = e.target.closest('.remove-dependency-btn');
-            const dependencyId = button.dataset.id;
+        const removeButton = e.target.closest('.remove-dependency-btn');
+        if (removeButton) {
+            const dependencyId = removeButton.dataset.id;
             
             if (confirm('Möchten Sie diese Abhängigkeit wirklich entfernen?')) {
                 try {
-                    const response = await fetch(`/dependencies/remove/${dependencyId}`, {
+                    // KORREKTUR: Die URL wird jetzt sicher und direkt im JavaScript zusammengesetzt.
+                    const url = `/jobs/dependencies/remove/${dependencyId}`;
+
+                    const response = await fetch(url, {
                         method: 'DELETE',
                         headers: {
                             'X-CSRFToken': '{{ csrf_token() }}'
@@ -141,12 +145,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
                     const data = await response.json();
 
-                    if (data.success) {
+                    if (response.ok) {
                         showAlert('Abhängigkeit entfernt.', 'success');
-                        button.closest('li').remove();
+                        removeButton.closest('li').remove();
                         checkIfListIsEmpty();
                     } else {
-                        showAlert(`Fehler: ${data.error || 'Unbekannter Fehler'}`, 'danger');
+                        showAlert(`Fehler: ${data.error || 'Unbekannter Serverfehler'}`, 'danger');
                     }
                 } catch (error) {
                      console.error('Fetch-Fehler:', error);
@@ -157,6 +161,7 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     function addDependencyToList(dependency) {
+        const noDependenciesLi = document.getElementById('no-dependencies');
         if (noDependenciesLi) {
             noDependenciesLi.remove();
         }
@@ -170,7 +175,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 <small class="text-muted ms-2">(${dependency.type})</small>
             </span>
             <button class="btn btn-sm btn-outline-danger remove-dependency-btn" data-id="${dependency.id}">
-                <i class="fas fa-trash-alt"></i>
+                <i class="bi bi-trash-fill"></i>
             </button>
         `;
         dependencyList.appendChild(li);
@@ -192,3 +197,4 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 </script>
 {% endblock %}
+
