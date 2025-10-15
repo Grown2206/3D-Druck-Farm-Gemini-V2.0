@@ -211,6 +211,7 @@ class GCodeFile(db.Model):
     layer_count = db.Column(db.Integer, nullable=True)
     dimensions_x_mm = db.Column(db.Float, nullable=True)
     dimensions_y_mm = db.Column(db.Float, nullable=True)
+    dimensions_z_mm = db.Column(db.Float, nullable=True)  # ✅ NEU
     filament_per_tool = db.Column(db.Text, nullable=True)
     material_type = db.Column(db.String(50), nullable=True)
     layer_height_mm = db.Column(db.Float, nullable=True)

@@ -1,0 +1,238 @@
+<!-- Predictive Analytics Tab -->
+<div class="row g-4 mb-4">
+    <div class="col-lg-12">
+        <div class="alert" style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%); border-left: 4px solid #667eea;">
+            <h5 class="alert-heading">
+                <i class="bi bi-stars"></i> Predictive Analytics
+            </h5>
+            <p class="mb-0">
+                Basierend auf historischen Daten und aktuellen Trends werden hier Vorhersagen und Empfehlungen generiert.
+            </p>
+        </div>
+    </div>
+</div>
+
+<!-- Material Predictions -->
+<div class="row g-4 mb-4">
+    <div class="col-lg-12">
+        <div class="kpi-card">
+            <div class="kpi-card-header">
+                <h3 class="kpi-card-title">
+                    <i class="bi bi-disc-fill"></i>
+                    📦 Material-Nachbestellungs-Prognose
+                </h3>
+                {% if material_predictions %}
+                <span class="badge bg-warning">{{ material_predictions|length }} Warnung(en)</span>
+                {% else %}
+                <span class="badge bg-success">Alles OK</span>
+                {% endif %}
+            </div>
+            <div class="kpi-card-body">
+                {% if material_predictions %}
+                    {% for prediction in material_predictions %}
+                    <div class="prediction-card {{ prediction.urgency }}-urgency">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div class="flex-grow-1">
+                                <h6 class="mb-1">
+                                    {% if prediction.urgency == 'high' %}
+                                    🚨 <strong>{{ prediction.name }}</strong>
+                                    {% else %}
+                                    ⚠️ <strong>{{ prediction.name }}</strong>
+                                    {% endif %}
+                                </h6>
+                                <p class="mb-0 small text-muted">
+                                    Voraussichtlich leer in <strong>{{ prediction.days_remaining }} Tagen</strong>
+                                </p>
+                            </div>
+                            <div class="text-end">
+                                <span class="badge {% if prediction.urgency == 'high' %}bg-danger{% else %}bg-warning{% endif %}">
+                                    {% if prediction.urgency == 'high' %}
+                                    DRINGEND
+                                    {% else %}
+                                    BALD
+                                    {% endif %}
+                                </span>
+                            </div>
+                        </div>
+                        <div class="mt-2">
+                            <small class="text-muted">
+                                <i class="bi bi-lightbulb-fill text-warning"></i>
+                                Empfehlung: 
+                                {% if prediction.days_remaining < 3 %}
+                                Sofort nachbestellen! Material wird sehr bald ausgehen.
+                                {% elif prediction.days_remaining < 7 %}
+                                Nachbestellung einleiten. Lieferzeit berücksichtigen.
+                                {% else %}
+                                Nachbestellung planen. Noch genug Puffer vorhanden.
+                                {% endif %}
+                            </small>
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="bi bi-check-circle-fill text-success" style="font-size: 4rem;"></i>
+                    <h5 class="text-white mt-3">Alle Material-Bestände sind ausreichend! ✅</h5>
+                    <p class="text-muted">Keine Nachbestellungen in den nächsten 7 Tagen erforderlich.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Maintenance Predictions -->
+<div class="row g-4 mb-4">
+    <div class="col-lg-12">
+        <div class="kpi-card">
+            <div class="kpi-card-header">
+                <h3 class="kpi-card-title">
+                    <i class="bi bi-tools"></i>
+                    🔧 Wartungs-Vorhersage
+                </h3>
+                {% if maintenance_predictions %}
+                <span class="badge bg-warning">{{ maintenance_predictions|length }} anstehend</span>
+                {% else %}
+                <span class="badge bg-success">Keine anstehend</span>
+                {% endif %}
+            </div>
+            <div class="kpi-card-body">
+                {% if maintenance_predictions %}
+                    {% for prediction in maintenance_predictions %}
+                    <div class="prediction-card {{ prediction.urgency }}-urgency">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div class="flex-grow-1">
+                                <h6 class="mb-1">
+                                    {% if prediction.urgency == 'high' %}
+                                    🔴 <strong>{{ prediction.printer }}</strong>
+                                    {% else %}
+                                    🟡 <strong>{{ prediction.printer }}</strong>
+                                    {% endif %}
+                                </h6>
+                                <p class="mb-0 small text-muted">
+                                    Wartung fällig in <strong>{{ prediction.hours_remaining }} Betriebsstunden</strong>
+                                </p>
+                            </div>
+                            <div class="text-end">
+                                <span class="badge {% if prediction.urgency == 'high' %}bg-danger{% else %}bg-warning{% endif %}">
+                                    {% if prediction.urgency == 'high' %}
+                                    SOFORT
+                                    {% else %}
+                                    BALD
+                                    {% endif %}
+                                </span>
+                            </div>
+                        </div>
+                        <div class="mt-2">
+                            <small class="text-muted">
+                                <i class="bi bi-calendar-check text-info"></i>
+                                Empfehlung: 
+                                {% if prediction.hours_remaining < 10 %}
+                                Wartung dringend einplanen! Drucker bald außer Betrieb nehmen.
+                                {% else %}
+                                Wartungstermin in nächsten Tagen einplanen.
+                                {% endif %}
+                            </small>
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="bi bi-check-circle-fill text-success" style="font-size: 4rem;"></i>
+                    <h5 class="text-white mt-3">Keine Wartungen in den nächsten 50h! ✅</h5>
+                    <p class="text-muted">Alle Drucker sind im grünen Bereich.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Deadline Risks -->
+<div class="row g-4 mb-4">
+    <div class="col-lg-12">
+        <div class="kpi-card">
+            <div class="kpi-card-header">
+                <h3 class="kpi-card-title">
+                    <i class="bi bi-exclamation-triangle-fill"></i>
+                    ⏰ Deadline-Risiko-Analyse
+                </h3>
+                {% if deadline_risks %}
+                <span class="badge bg-danger">{{ deadline_risks|length }} kritisch</span>
+                {% else %}
+                <span class="badge bg-success">Keine Risiken</span>
+                {% endif %}
+            </div>
+            <div class="kpi-card-body">
+                {% if deadline_risks %}
+                    {% for risk in deadline_risks %}
+                    <div class="prediction-card {{ risk.urgency }}-urgency">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div class="flex-grow-1">
+                                <h6 class="mb-1">
+                                    {% if risk.urgency == 'high' %}
+                                    🔥 <strong>{{ risk.job }}</strong>
+                                    {% else %}
+                                    ⚠️ <strong>{{ risk.job }}</strong>
+                                    {% endif %}
+                                </h6>
+                                <p class="mb-0 small text-muted">
+                                    Deadline in <strong>{{ risk.hours_left }}h</strong>
+                                </p>
+                            </div>
+                            <div class="text-end">
+                                <span class="badge {% if risk.urgency == 'high' %}bg-danger{% else %}bg-warning{% endif %}">
+                                    {% if risk.hours_left < 0 %}
+                                    ÜBERFÄLLIG
+                                    {% elif risk.hours_left < 12 %}
+                                    KRITISCH
+                                    {% else %}
+                                    DRINGEND
+                                    {% endif %}
+                                </span>
+                            </div>
+                        </div>
+                        <div class="mt-2">
+                            <small class="text-muted">
+                                <i class="bi bi-lightning-fill text-danger"></i>
+                                Empfehlung: 
+                                {% if risk.hours_left < 0 %}
+                                Job ist überfällig! Sofort mit Kunde kommunizieren.
+                                {% elif risk.hours_left < 12 %}
+                                Höchste Priorität! Job muss sofort gestartet werden.
+                                {% else %}
+                                Job priorisieren und zeitnah zuweisen.
+                                {% endif %}
+                            </small>
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="bi bi-check-circle-fill text-success" style="font-size: 4rem;"></i>
+                    <h5 class="text-white mt-3">Alle Deadlines unter Kontrolle! ✅</h5>
+                    <p class="text-muted">Keine kritischen Jobs in den nächsten 48 Stunden.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recommendation Summary -->
+<div class="row g-4">
+    <div class="col-lg-12">
+        <div class="kpi-card">
+            <div class="kpi-card-header">
+                <h3 class="kpi-card-title">
+                    <i class="bi bi-clipboard-check-fill"></i>
+                    📋 Handlungsempfehlungen Zusammenfassung
+                </h3>
+            </div>
+            <div class="kpi-card-body">
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <div class="text-center p-3" style="background: rgba(244, 92, 67, 0.1); border-radius: 12px;">
+                            <h2 class="{% if (material_predictions|length + maintenance_predictions|length + deadline_risks|length) > 0 %}text-danger{% else %}text-success{% endif %} mb-2">
+                                {{ (material_predictions|length + maintenance_predictions|length + deadline_risks|length) }}
+                            </h

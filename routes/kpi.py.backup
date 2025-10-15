@@ -1,5 +1,5 @@
 # /routes/kpi.py
-from flask import Blueprint, render_template, jsonify
+from flask import Blueprint, render_template
 from flask_login import login_required
 from sqlalchemy import func, case, desc
 from extensions import db
@@ -69,140 +69,105 @@ def dashboard():
         'data': [round(v, 2) for d, v in material_trend if v is not None]
     }
 
-    # --- 3. DRUCKER-PERFORMANCE ---
+    # --- 3. RESSOURCEN-MANAGEMENT & PERFORMANCE ---
+    
+    printer_performance = db.session.query(
+        Printer.name,
+        func.count(Job.id).label('total_jobs'),
+        func.sum(case((Job.quality_assessment == JobQuality.SUCCESSFUL, 1), else_=0)).label('successful_jobs')
+    ).outerjoin(Job, Printer.id == Job.printer_id)\
+     .filter(Job.status == JobStatus.COMPLETED)\
+     .group_by(Printer.name)\
+     .order_by(func.count(Job.id).desc())\
+     .all()
+
+    seven_days_ago = datetime.utcnow() - timedelta(days=7)
     printers = Printer.query.all()
-    printer_performance = []
-    
+    uptime_chart_data = {}
+
     for printer in printers:
-        jobs = Job.query.filter_by(printer_id=printer.id, status=JobStatus.COMPLETED).all()
-        total_jobs = len(jobs)
-        successful_jobs = len([j for j in jobs if j.quality_assessment == JobQuality.SUCCESSFUL])
-        
-        success_rate = (successful_jobs / total_jobs * 100) if total_jobs > 0 else 0
-        
-        total_hours = sum([j.actual_print_duration_s or 0 for j in jobs]) / 3600
-        
-        # 7-Tage Auslastung
-        seven_days_ago = datetime.utcnow() - timedelta(days=7)
-        jobs_7d = Job.query.filter(
-            Job.printer_id == printer.id,
-            Job.start_time >= seven_days_ago,
-            Job.status == JobStatus.COMPLETED
-        ).all()
-        
-        print_time_7d = sum([j.actual_print_duration_s or 0 for j in jobs_7d]) / 3600
-        total_time_7d = 7 * 24
-        utilization_7d = (print_time_7d / total_time_7d * 100) if total_time_7d > 0 else 0
-        
-        printer_performance.append({
-            'id': printer.id,
-            'name': printer.name,
-            'model': printer.model or 'N/A',
-            'total_jobs': total_jobs,
-            'successful_jobs': successful_jobs,
-            'success_rate': round(success_rate, 1),
-            'total_hours': round(total_hours, 1),
-            'utilization_7d': round(utilization_7d, 1),
-            'status': printer.status.value if printer.status else 'Unknown'
-        })
-    
-    printer_performance.sort(key=lambda x: x['success_rate'], reverse=True)
+        last_log_before_window = PrinterStatusLog.query.filter(
+            PrinterStatusLog.printer_id == printer.id,
+            PrinterStatusLog.timestamp < seven_days_ago
+        ).order_by(PrinterStatusLog.timestamp.desc()).first()
 
-    # Uptime Chart (7 Tage)
-    uptime_data = []
-    for i in range(7):
-        day = datetime.utcnow() - timedelta(days=7-i)
-        day_str = day.strftime('%d.%m')
+        logs_in_window = PrinterStatusLog.query.filter(
+            PrinterStatusLog.printer_id == printer.id,
+            PrinterStatusLog.timestamp >= seven_days_ago
+        ).order_by(PrinterStatusLog.timestamp.asc()).all()
         
-        day_start = day.replace(hour=0, minute=0, second=0, microsecond=0)
-        day_end = day_start + timedelta(days=1)
+        effective_logs = []
+        initial_status = last_log_before_window.status if last_log_before_window else printer.status if printer.status else PrinterStatus.OFFLINE
         
-        day_print_time = db.session.query(func.sum(Job.actual_print_duration_s)).filter(
-            Job.start_time >= day_start,
-            Job.start_time < day_end,
-            Job.status == JobStatus.COMPLETED
-        ).scalar() or 0
+        effective_logs.append({'status': initial_status, 'timestamp': seven_days_ago})
+
+        for log in logs_in_window:
+            if not effective_logs or log.status != effective_logs[-1]['status']:
+                 effective_logs.append({'status': log.status, 'timestamp': log.timestamp})
+
+        printer_uptime = {s.name: 0 for s in PrinterStatus}
         
-        uptime_data.append(round(day_print_time / 3600, 2))
-    
-    uptime_chart_data = {
-        'labels': [(datetime.utcnow() - timedelta(days=7-i)).strftime('%d.%m') for i in range(7)],
-        'data': uptime_data
-    }
+        for i, log_data in enumerate(effective_logs):
+            start_time = log_data['timestamp']
+            
+            is_last_log = (i + 1 == len(effective_logs))
+            end_time = datetime.utcnow() if is_last_log else effective_logs[i + 1]['timestamp']
+            
+            duration_seconds = (end_time - start_time).total_seconds()
+            if duration_seconds < 0: continue
+            duration_hours = duration_seconds / 3600
+            
+            status_name = log_data['status'].name if isinstance(log_data['status'], PrinterStatus) else log_data['status']
+            if status_name in printer_uptime:
+                printer_uptime[status_name] += duration_hours
+                
+        uptime_chart_data[printer.name] = printer_uptime
 
-    # Filament Stock
-    filament_stock = FilamentSpool.query.filter(FilamentSpool.current_weight_g > 0).join(FilamentType).all()
+    total_historical_hours = db.session.query(func.sum(Printer.historical_print_hours)).scalar() or 0
+    total_new_seconds = db.session.query(func.sum(Job.actual_print_duration_s)).filter(Job.status == JobStatus.COMPLETED).scalar() or 0
+    total_print_hours_all_time = round(total_historical_hours + ((total_new_seconds or 0) / 3600), 1)
 
-    # --- 4. KOSTEN & WIRTSCHAFTLICHKEIT ---
-    avg_duration_success = db.session.query(func.avg(Job.actual_print_duration_s)).filter(
-        Job.quality_assessment == JobQuality.SUCCESSFUL
-    ).scalar() or 0
-    
-    avg_duration_failed = db.session.query(func.avg(Job.actual_print_duration_s)).filter(
-        Job.quality_assessment == JobQuality.FAILED
-    ).scalar() or 0
+    total_historical_filament = db.session.query(func.sum(Printer.historical_filament_used_g)).scalar() or 0
+    total_new_filament = db.session.query(func.sum(GCodeFile.material_needed_g)).join(Job).filter(Job.status == JobStatus.COMPLETED).scalar() or 0
+    total_filament_all_time = (total_historical_filament or 0) + (total_new_filament or 0)
 
-    cost_data = db.session.query(
-        func.sum(Job.actual_cost).label('total'),
-        func.avg(Job.actual_cost).label('avg')
-    ).filter(Job.actual_cost.isnot(None)).one()
+    total_historical_jobs = db.session.query(func.sum(Printer.historical_jobs_count)).scalar() or 0
+    total_new_jobs = db.session.query(func.count(Job.id)).filter(Job.status == JobStatus.COMPLETED).scalar() or 0
+    total_printed_jobs_all_time = (total_historical_jobs or 0) + (total_new_jobs or 0)
     
-    cost_chart_data = {
-        'total': round(cost_data.total or 0, 2),
-        'average': round(cost_data.avg or 0, 2)
-    }
-
-    failures_by_material = db.session.query(
-        FilamentType.material_type,
-        func.count(Job.id)
-    ).join(Job.required_filament_type).filter(
-        Job.quality_assessment == JobQuality.FAILED
-    ).group_by(FilamentType.material_type).all()
-    
-    failures_by_material_chart = {
-        'labels': [f[0] for f in failures_by_material],
-        'data': [f[1] for f in failures_by_material]
-    }
-
-    # All-Time Stats
-    total_print_hours_all_time = db.session.query(func.sum(Job.actual_print_duration_s)).scalar() or 0
-    total_print_hours_all_time = total_print_hours_all_time / 3600
-    
-    total_filament_all_time = db.session.query(func.sum(GCodeFile.material_needed_g)).join(Job.gcode_file).scalar() or 0
-    
-    total_printed_jobs_all_time = Job.query.filter(Job.status == JobStatus.COMPLETED).count()
-
-    # Print Hours per Printer
     print_hours_per_printer = db.session.query(
         Printer.name,
         func.sum(Job.actual_print_duration_s) / 3600
-    ).join(Job, Printer.id == Job.printer_id).group_by(Printer.name).all()
-    
+    ).join(Job, Printer.id == Job.printer_id)\
+     .filter(Job.status == JobStatus.COMPLETED, Job.actual_print_duration_s.isnot(None))\
+     .group_by(Printer.name)\
+     .order_by(desc(func.sum(Job.actual_print_duration_s)))\
+     .all()
     print_hours_per_printer_chart = {
         'labels': [p[0] for p in print_hours_per_printer],
-        'data': [round(p[1], 2) for p in print_hours_per_printer]
+        'data': [round((p[1] or 0), 1) for p in print_hours_per_printer]
     }
-
-    # Material Consumption
-    material_consumption = db.session.query(
+    
+    material_consumption_by_type = db.session.query(
         FilamentType.material_type,
-        func.sum(GCodeFile.material_needed_g) / 1000
-    ).join(Job.required_filament_type).join(Job.gcode_file).group_by(FilamentType.material_type).all()
+        func.sum(GCodeFile.material_needed_g),
+        func.max(FilamentType.color_hex)
+    ).join(Job.gcode_file).join(Job.required_filament_type)\
+     .filter(Job.status == JobStatus.COMPLETED)\
+     .group_by(FilamentType.material_type)\
+     .all()
     
     material_consumption_chart = {
-        'labels': [m[0] for m in material_consumption],
-        'data': [round(m[1], 2) for m in material_consumption]
+        'labels': [m[0] for m in material_consumption_by_type],
+        'data': [round((m[1] or 0) / 1000, 2) for m in material_consumption_by_type],
+        'colors': [m[2] for m in material_consumption_by_type]
     }
 
-    # Recent Activity
-    recent_jobs = Job.query.filter(Job.status == JobStatus.COMPLETED).order_by(Job.end_time.desc()).limit(10).all()
-    recent_maintenance = MaintenanceLog.query.order_by(MaintenanceLog.timestamp.desc()).limit(10).all()
-    
-    farm_activity = sorted(recent_jobs + recent_maintenance, 
-                           key=lambda x: x.end_time if hasattr(x, 'end_time') and x.end_time else (x.timestamp if hasattr(x, 'timestamp') else datetime.min), 
-                           reverse=True)
+    yesterday = datetime.utcnow() - timedelta(hours=24)
+    recent_jobs = Job.query.filter(Job.end_time >= yesterday).order_by(Job.end_time.desc()).limit(15).all()
+    recent_maintenance = MaintenanceLog.query.filter(MaintenanceLog.timestamp >= yesterday).order_by(MaintenanceLog.timestamp.desc()).limit(15).all()
+    farm_activity = sorted(list(recent_jobs) + list(recent_maintenance), key=lambda x: x.end_time if hasattr(x, 'end_time') and x.end_time else (x.timestamp if hasattr(x, 'timestamp') else datetime.min), reverse=True)
 
-    # Material Efficiency
     material_success = db.session.query(func.sum(GCodeFile.material_needed_g)).join(Job.gcode_file).filter(Job.quality_assessment == JobQuality.SUCCESSFUL).scalar() or 0
     material_failed = db.session.query(func.sum(GCodeFile.material_needed_g)).join(Job.gcode_file).filter(Job.quality_assessment == JobQuality.FAILED).scalar() or 0
     material_efficiency_chart = {
@@ -210,7 +175,6 @@ def dashboard():
         'data': [round(material_success, 2), round(material_failed, 2)]
     }
 
-    # Top Filaments
     top_filaments = db.session.query(
         FilamentType.name,
         FilamentType.manufacturer,
@@ -225,7 +189,6 @@ def dashboard():
         'data': [f[2] for f in top_filaments]
     }
 
-    # Success Rate by Material
     success_by_material = db.session.query(
         FilamentType.material_type,
         func.count(Job.id).label('total'),
@@ -239,7 +202,7 @@ def dashboard():
         'data': [round(s.success / s.total * 100, 1) if s.total > 0 else 100 for s in success_by_material]
     }
 
-    # --- 5. WEITERE BESTEHENDE KPIs ---
+    # --- 4. BESTEHENDE KPIs ---
     weekday_map = {0: 'So', 1: 'Mo', 2: 'Di', 3: 'Mi', 4: 'Do', 5: 'Fr', 6: 'Sa'}
     jobs_by_weekday_q = db.session.query(
         func.strftime('%w', Job.completed_at).label('weekday'),
@@ -302,33 +265,62 @@ def dashboard():
      .order_by(desc(func.sum(Job.actual_cost))).all()
     costs_per_printer_chart = {
         'labels': [p[0] for p in costs_per_printer],
-        'data': [round(p[1], 2) for p in costs_per_printer]
+        'data': [round(p[1] or 0, 2) for p in costs_per_printer]
     }
 
-    # --- 6. NEUE PERFORMANCE-METRIKEN (OEE, MTBF, etc.) ---
+    avg_duration_success = db.session.query(func.avg(Job.actual_print_duration_s)).filter(Job.quality_assessment == JobQuality.SUCCESSFUL, Job.actual_print_duration_s.isnot(None)).scalar() or 0
+    avg_duration_failed = db.session.query(func.avg(Job.actual_print_duration_s)).filter(Job.quality_assessment == JobQuality.FAILED, Job.actual_print_duration_s.isnot(None)).scalar() or 0
+
+    total_costs = db.session.query(
+        func.sum(CostCalculation.material_cost),
+        func.sum(CostCalculation.machine_cost),
+        func.sum(CostCalculation.personnel_cost)
+    ).filter(Job.status == JobStatus.COMPLETED).first()
     
-    # OEE Berechnung
-    availability = (live_status['printing'] + live_status['idle']) / live_status['total'] * 100 if live_status['total'] > 0 else 0
-    performance = 85.0  # Placeholder
-    quality = farm_success_rate_30d
-    oee_score = (availability * performance * quality) / 10000
+    cost_chart_data = {
+        'labels': ['Material', 'Maschine', 'Personal'],
+        'data': [round(c or 0, 2) for c in total_costs]
+    }
+
+    failures_by_material = db.session.query(
+        FilamentType.name,
+        func.count(Job.id)
+    ).join(Job.required_filament_type)\
+     .filter(Job.quality_assessment == JobQuality.FAILED)\
+     .group_by(FilamentType.name)\
+     .order_by(func.count(Job.id).desc()).all()
+     
+    failures_by_material_chart = {
+        'labels': [m[0] for m in failures_by_material],
+        'data': [m[1] for m in failures_by_material]
+    }
+    
+    filament_stock = FilamentType.query.order_by(FilamentType.manufacturer, FilamentType.name).all()
+
+    # --- 5. PERFORMANCE & EFFIZIENZ (NEU) ---
+    
+    # OEE-Berechnung (vereinfacht)
+    total_available_time = Printer.query.count() * 7 * 24  # Stunden in 7 Tagen
+    total_actual_print_time = sum([sum(p.values()) for p in uptime_chart_data.values()])
+    availability = (total_actual_print_time / total_available_time * 100) if total_available_time > 0 else 0
+    
+    performance = 85  # Vereinfachte Annahme - könnte durch Soll vs. Ist-Druckzeit berechnet werden
+    quality_rate = farm_success_rate_30d
+    
+    oee_score = (availability * performance * quality_rate) / 10000
     
     oee_components_chart = {
         'labels': ['Verfügbarkeit', 'Leistung', 'Qualität'],
-        'data': [round(availability, 1), round(performance, 1), round(quality, 1)]
+        'data': [round(availability, 1), round(performance, 1), round(quality_rate, 1)]
     }
     
-    # MTBF (Mean Time Between Failures)
-    failed_jobs = Job.query.filter(
-        Job.quality_assessment == JobQuality.FAILED,
-        Job.end_time.isnot(None)
-    ).order_by(Job.end_time).all()
-    
+    # MTBF & MTTR (Mean Time Between/To Repair)
+    failed_jobs = Job.query.filter(Job.quality_assessment == JobQuality.FAILED).all()
     if len(failed_jobs) > 1:
         time_between_failures = []
-        for i in range(1, len(failed_jobs)):
-            if failed_jobs[i].end_time and failed_jobs[i-1].end_time:
-                delta = (failed_jobs[i].end_time - failed_jobs[i-1].end_time).total_seconds() / 3600
+        for i in range(len(failed_jobs) - 1):
+            if failed_jobs[i].end_time and failed_jobs[i+1].start_time:
+                delta = (failed_jobs[i+1].start_time - failed_jobs[i].end_time).total_seconds() / 3600
                 time_between_failures.append(delta)
         mtbf_hours = sum(time_between_failures) / len(time_between_failures) if time_between_failures else 0
     else:
@@ -386,40 +378,55 @@ def dashboard():
     ).count()
     first_pass_yield = (successful_jobs_30d / total_reviewed * 100) if total_reviewed > 0 else 100
 
-    # --- 7. KOSTEN & ROI ---
-    total_cost_sum = db.session.query(func.sum(Job.actual_cost)).filter(
-        Job.actual_cost.isnot(None)
-    ).scalar() or 0
+    # --- 6. KOSTEN & ROI (NEU) ---
     
-    total_jobs_with_cost = db.session.query(func.count(Job.id)).filter(
-        Job.actual_cost.isnot(None)
-    ).scalar() or 1
-    
-    cost_per_part = total_cost_sum / total_jobs_with_cost if total_jobs_with_cost > 0 else 0
-    
+    # Kostenstruktur
     cost_breakdown_chart = {
-        'labels': ['Material', 'Energie', 'Arbeitszeit'],
-        'data': [45, 30, 25]  # Placeholder - sollte aus echten Daten kommen
+        'labels': ['Material', 'Maschine', 'Personal'],
+        'data': [round(c or 0, 2) for c in total_costs],
+        'percentages': []
     }
+    total_cost_sum = sum([c or 0 for c in total_costs])
+    if total_cost_sum > 0:
+        cost_breakdown_chart['percentages'] = [round((c or 0) / total_cost_sum * 100, 1) for c in total_costs]
+    
+    # Kosten pro Teil
+    cost_per_part = (total_cost_sum / total_completed_30d) if total_completed_30d > 0 else 0
+    
+    # Energiekosten (geschätzt)
+    energy_costs_data = []
+    for printer in printers:
+        if printer.power_consumption_w and printer.energy_price_kwh:
+            printer_hours = print_hours_per_printer_chart['data'][print_hours_per_printer_chart['labels'].index(printer.name)] if printer.name in print_hours_per_printer_chart['labels'] else 0
+            # Konvertiere alle Werte zu float um Decimal-Fehler zu vermeiden
+            power_w = float(printer.power_consumption_w)
+            price_kwh = float(printer.energy_price_kwh)
+            hours = float(printer_hours)
+            energy_cost = (power_w / 1000) * hours * price_kwh
+            energy_costs_data.append({
+                'printer': printer.name,
+                'cost': round(energy_cost, 2)
+            })
     
     energy_costs_chart = {
-        'labels': [(datetime.utcnow() - timedelta(days=30-i)).strftime('%d.%m') for i in range(0, 30, 5)],
-        'data': [12, 15, 14, 16, 13, 17]  # Placeholder
+        'labels': [e['printer'] for e in energy_costs_data],
+        'data': [e['cost'] for e in energy_costs_data]
     }
     
-    # ROI per Printer
+    # ROI-Berechnung pro Drucker
     roi_data = []
     for printer in printers:
-        printer_jobs = Job.query.filter_by(printer_id=printer.id).filter(
-            Job.actual_cost.isnot(None)
-        ).all()
-        printer_total_cost = sum([j.actual_cost for j in printer_jobs]) or 0
-        
-        roi = ((printer_total_cost - (printer.purchase_cost or 0)) / (printer.purchase_cost or 1) * 100) if printer.purchase_cost else 0
-        roi_data.append({
-            'printer': printer.name,
-            'roi': round(roi, 1)
-        })
+        if printer.purchase_cost and printer.purchase_cost > 0:
+            printer_total_cost = db.session.query(func.sum(Job.actual_cost)).filter(
+                Job.printer_id == printer.id,
+                Job.status == JobStatus.COMPLETED
+            ).scalar() or 0
+            
+            roi = ((printer_total_cost - printer.purchase_cost) / printer.purchase_cost * 100) if printer.purchase_cost > 0 else 0
+            roi_data.append({
+                'printer': printer.name,
+                'roi': round(roi, 1)
+            })
     
     roi_chart = {
         'labels': [r['printer'] for r in roi_data],
@@ -447,105 +454,13 @@ def dashboard():
         'data': [round(total_cost_sum, 2), round(total_maintenance_cost / 12, 2)]
     }
 
-    # --- 8. NEUE DATEN FÜR INCLUDE-TEMPLATES ---
-    
-    # Für Projects Tab
-    total_projects = 0
-    active_projects = 0
-    completed_projects = 0
-    projects_at_risk = 0
-    project_success_rate = 100
-    
-    try:
-        from models import Project, DeadlineStatus
-        total_projects = Project.query.count()
-        active_projects = Project.query.filter_by(status='active').count()
-        completed_projects = Project.query.filter_by(status='completed').count()
-        
-        projects_red = Project.query.filter(
-            Project.deadline_status == DeadlineStatus.RED
-        ).count()
-        projects_overdue = Project.query.filter(
-            Project.deadline_status == DeadlineStatus.OVERDUE
-        ).count()
-        projects_at_risk = projects_red + projects_overdue
-        
-        if completed_projects > 0:
-            on_time_projects = Project.query.filter(
-                Project.status == 'completed',
-                Project.actual_completion_date <= Project.deadline
-            ).count()
-            project_success_rate = (on_time_projects / completed_projects) * 100
-    except:
-        pass
-    
-    # Für Scheduler Tab
-    auto_assignment_rate = 75.0
-    critical_path_jobs = 0
-    total_dependencies = 0
-    blocking_dependencies = 0
-    priority_chart = {'labels': [], 'data': []}
-    
-    try:
-        critical_path_jobs = Job.query.filter(
-            Job.is_on_critical_path == True,
-            Job.status != JobStatus.COMPLETED
-        ).count() if hasattr(Job, 'is_on_critical_path') else 0
-        
-        try:
-            from models import JobDependency
-            total_dependencies = JobDependency.query.count()
-            blocking_dependencies = JobDependency.query.join(
-                Job, JobDependency.depends_on_job_id == Job.id
-            ).filter(
-                Job.status != JobStatus.COMPLETED
-            ).count()
-        except ImportError:
-            pass
-        
-        if hasattr(Job, 'priority_score'):
-            priority_ranges = [
-                ('Kritisch (>80)', 80, 100),
-                ('Hoch (60-80)', 60, 80),
-                ('Mittel (40-60)', 40, 60),
-                ('Niedrig (20-40)', 20, 40),
-                ('Sehr niedrig (<20)', 0, 20)
-            ]
-            priority_distribution = []
-            for label, min_p, max_p in priority_ranges:
-                count = Job.query.filter(
-                    Job.priority_score >= min_p,
-                    Job.priority_score < max_p,
-                    Job.status.in_([JobStatus.PENDING, JobStatus.QUEUED, JobStatus.ASSIGNED])
-                ).count()
-                priority_distribution.append(count)
-            
-            priority_chart = {
-                'labels': [r[0] for r in priority_ranges],
-                'data': priority_distribution
-            }
-    except Exception as e:
-        print(f"Scheduler-Daten: {e}")
-    
-    # Für Predictive Tab
-    material_predictions = []
-    maintenance_predictions = []
-    deadline_risks = []
-    
-    # Für Performance Tab
-    sorted_performance = sorted(printer_performance, key=lambda x: x['success_rate'], reverse=True)
-    top_performers = sorted_performance[:3] if len(sorted_performance) >= 3 else sorted_performance
-    bottom_performers = sorted_performance[-3:] if len(sorted_performance) >= 3 else []
-
-    # --- 9. RETURN MIT ALLEN VARIABLEN ---
     return render_template(
         'kpi/dashboard.html',
-        # Basis-Daten
+        # Bestehende Daten
         live_status=live_status,
         pending_jobs_count=pending_jobs_count,
         farm_success_rate_30d=round(farm_success_rate_30d, 1),
         job_throughput_30d=round(job_throughput_30d, 1),
-        total_completed_30d=total_completed_30d,
         material_trend_chart=material_trend_chart,
         printer_performance=printer_performance,
         uptime_chart_data=uptime_chart_data,
@@ -569,7 +484,7 @@ def dashboard():
         stock_by_material_chart=stock_by_material_chart,
         production_trend_chart=production_trend_chart,
         costs_per_printer_chart=costs_per_printer_chart,
-        # Performance-Daten
+        # Neue Performance-Daten
         oee_score=round(oee_score, 1),
         oee_components_chart=oee_components_chart,
         mtbf_hours=round(mtbf_hours, 1),
@@ -579,59 +494,12 @@ def dashboard():
         lead_time_chart=lead_time_chart,
         avg_lead_time=round(avg_lead_time, 1),
         first_pass_yield=round(first_pass_yield, 1),
-        top_performers=top_performers,
-        bottom_performers=bottom_performers,
-        # Kosten/ROI-Daten
+        # Neue Kosten/ROI-Daten
         cost_breakdown_chart=cost_breakdown_chart,
         cost_per_part=round(cost_per_part, 2),
         energy_costs_chart=energy_costs_chart,
         roi_chart=roi_chart,
         monthly_costs_chart=monthly_costs_chart,
         maintenance_vs_production_chart=maintenance_vs_production_chart,
-        total_cost_sum=round(total_cost_sum, 2),
-        total_material_cost=round(sum([p.get('material_cost', 0) for p in printer_performance]), 2),
-        total_energy_cost=round(sum([p.get('energy_cost', 0) for p in printer_performance]), 2),
-        # Projects Tab
-        total_projects=total_projects,
-        active_projects=active_projects,
-        completed_projects=completed_projects,
-        projects_at_risk=projects_at_risk,
-        project_success_rate=round(project_success_rate, 1),
-        # Scheduler Tab
-        auto_assignment_rate=round(auto_assignment_rate, 1),
-        critical_path_jobs=critical_path_jobs,
-        total_dependencies=total_dependencies,
-        blocking_dependencies=blocking_dependencies,
-        priority_chart=priority_chart,
-        # Predictive Tab
-        material_predictions=material_predictions,
-        maintenance_predictions=maintenance_predictions,
-        deadline_risks=deadline_risks
+        total_cost_sum=round(total_cost_sum, 2)
     )
-
-
-@kpi_bp.route('/api/queue-status')
-@login_required
-def api_queue_status():
-    """API Endpunkt für Queue-Status im Scheduler Tab"""
-    try:
-        pending_jobs = Job.query.filter(
-            Job.status.in_([JobStatus.PENDING, JobStatus.QUEUED])
-        ).order_by(
-            Job.priority_score.desc() if hasattr(Job, 'priority_score') else Job.created_at
-        ).limit(10).all()
-        
-        queue_data = []
-        for job in pending_jobs:
-            queue_data.append({
-                'id': job.id,
-                'name': job.name,
-                'status': job.status.value,
-                'priority_score': round(job.priority_score, 1) if hasattr(job, 'priority_score') else 0,
-                'is_critical': job.is_on_critical_path if hasattr(job, 'is_on_critical_path') else False,
-                'deadline': job.deadline.isoformat() if hasattr(job, 'deadline') and job.deadline else None
-            })
-        
-        return jsonify(queue_data)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500

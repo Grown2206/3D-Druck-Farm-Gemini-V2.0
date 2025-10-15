@@ -1,0 +1,353 @@
+<!-- Performance Tab Content -->
+<div class="row g-4 mb-4">
+    <!-- All Printers Performance Overview -->
+    <div class="col-lg-12">
+        <div class="kpi-card">
+            <div class="kpi-card-header">
+                <h3 class="kpi-card-title">
+                    <i class="bi bi-printer-fill"></i>
+                    Drucker-Performance Übersicht
+                </h3>
+            </div>
+            <div class="kpi-card-body">
+                <div class="table-responsive">
+                    <table class="table table-dark table-hover">
+                        <thead>
+                            <tr>
+                                <th>Drucker</th>
+                                <th>Modell</th>
+                                <th>Jobs</th>
+                                <th>Erfolgsrate</th>
+                                <th>Druckstunden</th>
+                                <th>Auslastung (7d)</th>
+                                <th>Status</th>
+                                <th>Ranking</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for printer in printer_performance %}
+                            <tr>
+                                <td><strong>{{ printer.name }}</strong></td>
+                                <td><span class="text-muted">{{ printer.model }}</span></td>
+                                <td>{{ printer.total_jobs }}</td>
+                                <td>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="badge {% if printer.success_rate >= 95 %}bg-success{% elif printer.success_rate >= 85 %}bg-info{% elif printer.success_rate >= 70 %}bg-warning{% else %}bg-danger{% endif %}">
+                                            {{ printer.success_rate }}%
+                                        </span>
+                                        <div class="progress flex-grow-1" style="width: 100px; height: 8px;">
+                                            <div class="progress-bar {% if printer.success_rate >= 95 %}bg-success{% elif printer.success_rate >= 85 %}bg-info{% elif printer.success_rate >= 70 %}bg-warning{% else %}bg-danger{% endif %}" 
+                                                 style="width: {{ printer.success_rate }}%"></div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>{{ printer.total_hours }}h</td>
+                                <td>
+                                    <span class="badge {% if printer.utilization_7d >= 70 %}bg-success{% elif printer.utilization_7d >= 50 %}bg-info{% elif printer.utilization_7d >= 30 %}bg-warning{% else %}bg-secondary{% endif %}">
+                                        {{ printer.utilization_7d }}%
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="badge {% if printer.status == 'Printing' %}bg-primary{% elif printer.status == 'Idle' %}bg-secondary{% elif printer.status == 'Maintenance' %}bg-warning{% elif printer.status == 'Error' %}bg-danger{% else %}bg-dark{% endif %}">
+                                        {{ printer.status }}
+                                    </span>
+                                </td>
+                                <td>
+                                    {% if loop.index <= 3 %}
+                                        <i class="bi bi-trophy-fill text-warning"></i>
+                                    {% elif loop.index >= (printer_performance|length - 2) %}
+                                        <i class="bi bi-arrow-down-circle-fill text-danger"></i>
+                                    {% else %}
+                                        <i class="bi bi-dash-circle text-muted"></i>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Top & Bottom Performers Detail -->
+<div class="row g-4 mb-4">
+    <div class="col-lg-6">
+        <div class="kpi-card">
+            <div class="kpi-card-header">
+                <h3 class="kpi-card-title">
+                    <i class="bi bi-trophy-fill text-warning"></i>
+                    🏆 Top Performer
+                </h3>
+            </div>
+            <div class="kpi-card-body">
+                {% for printer in top_performers %}
+                <div class="printer-item mb-3 p-3" style="background: linear-gradient(135deg, rgba(56, 239, 125, 0.1) 0%, rgba(17, 153, 142, 0.1) 100%); border-left: 4px solid #38ef7d;">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div>
+                            <h5 class="mb-1">
+                                {% if loop.index == 1 %}🥇{% elif loop.index == 2 %}🥈{% else %}🥉{% endif %}
+                                {{ printer.name }}
+                            </h5>
+                            <p class="text-muted mb-0 small">{{ printer.model }}</p>
+                        </div>
+                        <div class="text-end">
+                            <div class="performance-badge excellent">
+                                <i class="bi bi-star-fill"></i> {{ printer.success_rate }}%
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row mt-3 text-center">
+                        <div class="col-4">
+                            <strong class="d-block text-success">{{ printer.total_jobs }}</strong>
+                            <small class="text-muted">Jobs</small>
+                        </div>
+                        <div class="col-4">
+                            <strong class="d-block text-info">{{ printer.total_hours }}h</strong>
+                            <small class="text-muted">Stunden</small>
+                        </div>
+                        <div class="col-4">
+                            <strong class="d-block text-warning">{{ printer.utilization_7d }}%</strong>
+                            <small class="text-muted">Auslastung</small>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="kpi-card">
+            <div class="kpi-card-header">
+                <h3 class="kpi-card-title">
+                    <i class="bi bi-tools text-warning"></i>
+                    ⚠️ Verbesserungsbedarf
+                </h3>
+            </div>
+            <div class="kpi-card-body">
+                {% for printer in bottom_performers %}
+                <div class="printer-item mb-3 p-3" style="background: linear-gradient(135deg, rgba(244, 92, 67, 0.1) 0%, rgba(235, 51, 73, 0.1) 100%); border-left: 4px solid #f45c43;">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div>
+                            <h5 class="mb-1">{{ printer.name }}</h5>
+                            <p class="text-muted mb-0 small">{{ printer.model }}</p>
+                        </div>
+                        <div class="text-end">
+                            <div class="performance-badge {% if printer.success_rate >= 70 %}warning{% else %}poor{% endif %}">
+                                <i class="bi bi-exclamation-triangle-fill"></i> {{ printer.success_rate }}%
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row mt-3 text-center">
+                        <div class="col-4">
+                            <strong class="d-block">{{ printer.total_jobs }}</strong>
+                            <small class="text-muted">Jobs</small>
+                        </div>
+                        <div class="col-4">
+                            <strong class="d-block">{{ printer.total_hours }}h</strong>
+                            <small class="text-muted">Stunden</small>
+                        </div>
+                        <div class="col-4">
+                            <strong class="d-block">{{ printer.utilization_7d }}%</strong>
+                            <small class="text-muted">Auslastung</small>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <small class="text-warning">
+                            <i class="bi bi-lightbulb-fill"></i>
+                            {% if printer.success_rate < 70 %}
+                            Empfehlung: Wartung prüfen, häufige Fehlerquellen analysieren
+                            {% elif printer.utilization_7d < 30 %}
+                            Empfehlung: Drucker wird wenig genutzt, Job-Zuweisung optimieren
+                            {% else %}
+                            Empfehlung: Performance-Analyse durchführen
+                            {% endif %}
+                        </small>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quality Metrics Detail -->
+<div class="row g-4 mb-4">
+    <div class="col-lg-3 col-md-6">
+        <div class="metric-box" style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);">
+            <div class="metric-box-label">Verfügbarkeit</div>
+            <div class="metric-box-value" style="color: #667eea;">{{ availability }}%</div>
+            <div class="metric-box-subtitle">Uptime (7 Tage)</div>
+            <div class="progress mt-2" style="height: 8px;">
+                <div class="progress-bar" style="width: {{ availability }}%; background: #667eea;"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-3 col-md-6">
+        <div class="metric-box" style="background: linear-gradient(135deg, rgba(56, 239, 125, 0.1) 0%, rgba(17, 153, 142, 0.1) 100%);">
+            <div class="metric-box-label">First Pass Yield</div>
+            <div class="metric-box-value" style="color: #38ef7d;">{{ first_pass_yield }}%</div>
+            <div class="metric-box-subtitle">Ersterfolg-Quote</div>
+            <div class="progress mt-2" style="height: 8px;">
+                <div class="progress-bar bg-success" style="width: {{ first_pass_yield }}%;"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-3 col-md-6">
+        <div class="metric-box" style="background: linear-gradient(135deg, rgba(255, 193, 7, 0.1) 0%, rgba(255, 152, 0, 0.1) 100%);">
+            <div class="metric-box-label">MTBF</div>
+            <div class="metric-box-value" style="color: #ffc107;">{{ mtbf_hours }}h</div>
+            <div class="metric-box-subtitle">Zeit zwischen Ausfällen</div>
+            <small class="text-muted">
+                {% if mtbf_hours > 500 %}✅ Exzellent{% elif mtbf_hours > 200 %}✅ Gut{% else %}⚠️ Verbesserungsbedarf{% endif %}
+            </small>
+        </div>
+    </div>
+
+    <div class="col-lg-3 col-md-6">
+        <div class="metric-box" style="background: linear-gradient(135deg, rgba(244, 92, 67, 0.1) 0%, rgba(235, 51, 73, 0.1) 100%);">
+            <div class="metric-box-label">MTTR</div>
+            <div class="metric-box-value" style="color: #f45c43;">{{ mttr_hours }}h</div>
+            <div class="metric-box-subtitle">Durchschn. Reparaturzeit</div>
+            <small class="text-muted">
+                {% if mttr_hours < 2 %}✅ Sehr schnell{% elif mttr_hours < 5 %}✅ Schnell{% else %}⚠️ Langsam{% endif %}
+            </small>
+        </div>
+    </div>
+</div>
+
+<!-- OEE Breakdown -->
+<div class="row g-4">
+    <div class="col-lg-12">
+        <div class="kpi-card">
+            <div class="kpi-card-header">
+                <h3 class="kpi-card-title">
+                    <i class="bi bi-pie-chart-fill"></i>
+                    OEE-Analyse (Overall Equipment Effectiveness)
+                </h3>
+                <span class="performance-badge {% if oee_score >= 85 %}excellent{% elif oee_score >= 60 %}good{% elif oee_score >= 40 %}warning{% else %}poor{% endif %}">
+                    {{ oee_score }}%
+                </span>
+            </div>
+            <div class="kpi-card-body">
+                <div class="row">
+                    <div class="col-md-8">
+                        <canvas id="oeeRadarChart" height="80"></canvas>
+                    </div>
+                    <div class="col-md-4">
+                        <h5 class="mb-3">OEE-Komponenten</h5>
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between mb-1">
+                                <span>Verfügbarkeit</span>
+                                <strong>{{ availability }}%</strong>
+                            </div>
+                            <div class="progress" style="height: 12px;">
+                                <div class="progress-bar bg-info" style="width: {{ availability }}%"></div>
+                            </div>
+                            <small class="text-muted">Geplante Zeit vs. tatsächliche Betriebszeit</small>
+                        </div>
+
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between mb-1">
+                                <span>Leistung</span>
+                                <strong>{{ ((oee_score / farm_success_rate_30d * 100) / availability * 100) | round(1) if availability > 0 else 0 }}%</strong>
+                            </div>
+                            <div class="progress" style="height: 12px;">
+                                <div class="progress-bar bg-warning" style="width: {{ ((oee_score / farm_success_rate_30d * 100) / availability * 100) if availability > 0 else 0 }}%"></div>
+                            </div>
+                            <small class="text-muted">Soll-Output vs. Ist-Output</small>
+                        </div>
+
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between mb-1">
+                                <span>Qualität</span>
+                                <strong>{{ farm_success_rate_30d }}%</strong>
+                            </div>
+                            <div class="progress" style="height: 12px;">
+                                <div class="progress-bar bg-success" style="width: {{ farm_success_rate_30d }}%"></div>
+                            </div>
+                            <small class="text-muted">Gute Teile vs. Gesamt-Output</small>
+                        </div>
+
+                        <hr class="my-3">
+
+                        <div class="alert {% if oee_score >= 85 %}alert-success{% elif oee_score >= 60 %}alert-info{% else %}alert-warning{% endif %} mb-0">
+                            <strong>Bewertung:</strong><br>
+                            {% if oee_score >= 85 %}
+                            🌟 World-Class! Ihre Produktion läuft auf Top-Niveau.
+                            {% elif oee_score >= 60 %}
+                            ✅ Gut. Es gibt noch Optimierungspotential.
+                            {% elif oee_score >= 40 %}
+                            ⚠️ Durchschnittlich. Fokus auf Verbesserungen legen.
+                            {% else %}
+                            ❌ Kritisch. Dringende Maßnahmen erforderlich.
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // OEE Radar Chart
+    if (document.getElementById('oeeRadarChart')) {
+        new Chart(document.getElementById('oeeRadarChart'), {
+            type: 'radar',
+            data: {
+                labels: ['Verfügbarkeit', 'Leistung', 'Qualität'],
+                datasets: [{
+                    label: 'Aktuell',
+                    data: {{ oee_components_chart.data | tojson }},
+                    borderColor: 'rgba(56, 239, 125, 1)',
+                    backgroundColor: 'rgba(56, 239, 125, 0.2)',
+                    pointBackgroundColor: 'rgba(56, 239, 125, 1)',
+                    pointBorderColor: '#fff',
+                    pointHoverBackgroundColor: '#fff',
+                    pointHoverBorderColor: 'rgba(56, 239, 125, 1)',
+                    pointRadius: 6
+                }, {
+                    label: 'Ziel (World-Class)',
+                    data: [95, 95, 99],
+                    borderColor: 'rgba(102, 126, 234, 1)',
+                    backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                    pointBackgroundColor: 'rgba(102, 126, 234, 1)',
+                    pointBorderColor: '#fff',
+                    pointRadius: 4,
+                    borderDash: [5, 5]
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    r: {
+                        beginAtZero: true,
+                        max: 100,
+                        ticks: {
+                            stepSize: 20,
+                            callback: function(value) {
+                                return value + '%';
+                            }
+                        },
+                        pointLabels: {
+                            font: { size: 14 }
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        labels: { color: '#adb5bd', padding: 20 }
+                    }
+                }
+            }
+        });
+    }
+});
+</script>

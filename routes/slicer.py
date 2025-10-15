@@ -116,6 +116,7 @@ def delete_gcode(gcode_file_id):
 
 
 def run_slicing_process(stl_filename, profile_id):
+    """Führt den Slicing-Prozess mit PrusaSlicer durch."""
     profile = db.session.get(SlicerProfile, profile_id)
     if not profile:
         return False, "Ausgewähltes Slicer-Profil nicht gefunden.", None
@@ -126,74 +127,87 @@ def run_slicing_process(stl_filename, profile_id):
     slicer_path = os.environ.get('PRUSA_SLICER_PATH')
     slicer_datadir = os.environ.get('PRUSA_SLICER_DATADIR')
 
+    # FIX: String war nicht geschlossen
     if not slicer_path or not os.path.exists(slicer_path):
         return False, "PrusaSlicer-Pfad ist nicht in .env konfiguriert oder ungültig.", None
     
+    # Weitere Validierung
     if not slicer_datadir or not os.path.exists(slicer_datadir):
-        return False, "PrusaSlicer-Datenverzeichnis (DATADIR) ist nicht in .env konfiguriert oder ungültig.", None
-
-
-    stl_full_path = os.path.join(current_app.config['STL_FOLDER'], stl_filename)
-    base_filename = stl_filename.replace('.stl', f'_{profile.name.replace(" ", "_")}.gcode')
-    gcode_filename = secure_filename(base_filename)
-    gcode_full_path = os.path.join(current_app.config['GCODE_FOLDER'], gcode_filename)
-    profile_full_path = os.path.join(current_app.config['SLICER_PROFILES_FOLDER'], profile.filename)
-
-    command = [
-        slicer_path,
-        "--datadir", slicer_datadir,
-        "--export-gcode",
-        "-o", gcode_full_path,
-        "--load", profile_full_path,
-        stl_full_path
-    ]
-
-    print(f"Executing PrusaSlicer command: {' '.join(command)}")
-
+        return False, "PrusaSlicer-Datenverzeichnis ist nicht in .env konfiguriert oder ungültig.", None
+    
     try:
-        process = subprocess.run(command, capture_output=True, text=True, check=False, encoding='utf-8')
-        if process.returncode != 0:
-            if not os.path.exists(gcode_full_path) or os.path.getsize(gcode_full_path) == 0:
-                error_message = f"PrusaSlicer Fehler (Exit Code {process.returncode}):\nSTDOUT:\n{process.stdout}\nSTDERR:\n{process.stderr}"
-                print(error_message)
-                return False, "Fehler im PrusaSlicer-Prozess. Details im Server-Log.", None
-    
-        if not os.path.exists(gcode_full_path) or os.path.getsize(gcode_full_path) < 100:
-            return False, "Slicing-Prozess lief ohne Fehler durch, hat aber keine gültige G-Code-Datei erstellt.", None
-
-    except FileNotFoundError:
-        return False, f"Slicer-Programm unter '{slicer_path}' nicht gefunden.", None
+        # STL-Pfad konstruieren
+        stl_full_path = os.path.join(current_app.config['STL_FOLDER'], stl_filename)
+        
+        if not os.path.exists(stl_full_path):
+            return False, f"STL-Datei '{stl_filename}' wurde nicht gefunden.", None
+        
+        # G-Code-Ausgabepfad
+        gcode_filename = f"{os.path.splitext(stl_filename)[0]}.gcode"
+        gcode_full_path = os.path.join(current_app.config['GCODE_FOLDER'], gcode_filename)
+        
+        # Profil-Pfad
+        profile_path = os.path.join(current_app.config['SLICER_PROFILES_FOLDER'], profile.filename)
+        
+        if not os.path.exists(profile_path):
+            return False, f"Profil-Datei '{profile.filename}' wurde nicht gefunden.", None
+        
+        # PrusaSlicer-Befehl ausführen
+        command = [
+            slicer_path,
+            '--load', profile_path,
+            '--datadir', slicer_datadir,
+            '--export-gcode',
+            '--output', gcode_full_path,
+            stl_full_path
+        ]
+        
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=300  # 5 Minuten Timeout
+        )
+        
+        if result.returncode != 0:
+            error_msg = result.stderr if result.stderr else "Unbekannter Slicing-Fehler"
+            return False, f"Slicing fehlgeschlagen: {error_msg}", None
+        
+        # Prüfe ob G-Code-Datei erstellt wurde
+        if not os.path.exists(gcode_full_path):
+            return False, "G-Code-Datei wurde nicht erstellt.", None
+        
+        # Analysiere G-Code
+        from gcode_analyzer import analyze_gcode, create_gcode_preview
+        
+        gcode_info = analyze_gcode(gcode_full_path)
+        
+        # Erstelle Vorschau
+        preview_filename = f"{os.path.splitext(gcode_filename)[0]}_preview.png"
+        preview_path = os.path.join(current_app.config['GCODE_FOLDER'], preview_filename)
+        create_gcode_preview(gcode_full_path, preview_path)
+        
+        # Speichere G-Code in Datenbank
+        # WICHTIG: Verwende die korrekten Feldnamen aus models.py
+        gcode_file = GCodeFile(
+            filename=gcode_filename,
+            source_stl_filename=stl_filename,
+            slicer_profile_id=profile.id,
+            estimated_print_time_min=gcode_info.get('print_time_min'),
+            material_needed_g=gcode_info.get('filament_used_g'),
+            layer_count=gcode_info.get('layer_count'),
+            dimensions_x_mm=gcode_info.get('width_mm'),  # X-Dimension
+            dimensions_y_mm=gcode_info.get('depth_mm'),  # Y-Dimension
+            dimensions_z_mm=gcode_info.get('height_mm'),  # ✅ NEU
+            preview_image_filename=preview_filename if os.path.exists(preview_path) else None
+        )
+        
+        db.session.add(gcode_file)
+        db.session.commit()
+        
+        return True, f"Slicing erfolgreich abgeschlossen. G-Code: {gcode_filename}", gcode_file.id
+        
+    except subprocess.TimeoutExpired:
+        return False, "Slicing-Prozess hat das Zeitlimit überschritten.", None
     except Exception as e:
-        return False, f"Ein unerwarteter Fehler ist während des Slicing-Prozesses aufgetreten: {e}", None
-    
-    analysis_results = analyze_gcode(gcode_full_path)
-    if not analysis_results:
-        return False, "Analyse der erstellten G-Code-Datei fehlgeschlagen.", None
-
-    preview_filename = gcode_filename.replace('.gcode', '.png')
-    preview_full_path = os.path.join(current_app.config['GCODE_FOLDER'], preview_filename)
-    
-    preview_created = create_gcode_preview(gcode_full_path, preview_full_path)
-    final_preview_filename = preview_filename if preview_created else None
-    if not preview_created:
-        print(f"Warnung: Konnte keine G-Code-Vorschau für {gcode_filename} erstellen.")
-
-
-    new_gcode_file = GCodeFile(
-        filename=gcode_filename,
-        source_stl_filename=stl_filename,
-        slicer_profile_id=profile_id,
-        estimated_print_time_min=analysis_results.get('print_time_min'),
-        material_needed_g=analysis_results.get('filament_used_g'),
-        filament_needed_mm=analysis_results.get('filament_used_mm'),
-        tool_changes=analysis_results.get('tool_changes'),
-        preview_image_filename=final_preview_filename,
-        layer_count=analysis_results.get('layer_count'),
-        dimensions_x_mm=analysis_results.get('width_mm'),
-        dimensions_y_mm=analysis_results.get('depth_mm'),
-        filament_per_tool=json.dumps(analysis_results.get('filament_per_tool', {}))
-    )
-    db.session.add(new_gcode_file)
-    db.session.commit()
-    
-    return True, f"Modell '{stl_filename}' erfolgreich mit Profil '{profile.name}' gesliced.", new_gcode_file
+        return False, f"Fehler beim Slicing: {str(e)}", None

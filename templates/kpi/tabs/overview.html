@@ -1,0 +1,318 @@
+<!-- Overview Tab Content -->
+<div class="row g-4 mb-4">
+    <!-- Production Overview -->
+    <div class="col-lg-8">
+        <div class="kpi-card">
+            <div class="kpi-card-header">
+                <h3 class="kpi-card-title">
+                    <i class="bi bi-graph-up-arrow"></i>
+                    Produktions-Trend (30 Tage)
+                </h3>
+            </div>
+            <div class="kpi-card-body">
+                <canvas id="productionTrendChart" height="80"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Stats -->
+    <div class="col-lg-4">
+        <div class="kpi-card">
+            <div class="kpi-card-header">
+                <h3 class="kpi-card-title">
+                    <i class="bi bi-lightning-fill"></i>
+                    Quick Stats
+                </h3>
+            </div>
+            <div class="kpi-card-body">
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="text-muted">Gesamt Jobs (30d)</span>
+                        <strong class="text-white">{{ total_completed_30d }}</strong>
+                    </div>
+                    <div class="progress" style="height: 8px;">
+                        <div class="progress-bar bg-success" style="width: 100%"></div>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="text-muted">Erfolgsrate</span>
+                        <strong class="text-success">{{ farm_success_rate_30d }}%</strong>
+                    </div>
+                    <div class="progress" style="height: 8px;">
+                        <div class="progress-bar bg-success" style="width: {{ farm_success_rate_30d }}%"></div>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="text-muted">OEE Score</span>
+                        <strong class="{% if oee_score >= 85 %}text-success{% elif oee_score >= 60 %}text-warning{% else %}text-danger{% endif %}">
+                            {{ oee_score }}%
+                        </strong>
+                    </div>
+                    <div class="progress" style="height: 8px;">
+                        <div class="progress-bar {% if oee_score >= 85 %}bg-success{% elif oee_score >= 60 %}bg-warning{% else %}bg-danger{% endif %}" 
+                             style="width: {{ oee_score }}%"></div>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="text-muted">Verfügbarkeit</span>
+                        <strong class="text-info">{{ availability }}%</strong>
+                    </div>
+                    <div class="progress" style="height: 8px;">
+                        <div class="progress-bar bg-info" style="width: {{ availability }}%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Material Consumption & Capacity -->
+<div class="row g-4 mb-4">
+    <div class="col-lg-6">
+        <div class="kpi-card">
+            <div class="kpi-card-header">
+                <h3 class="kpi-card-title">
+                    <i class="bi bi-disc-fill"></i>
+                    Material-Verbrauch (30 Tage)
+                </h3>
+            </div>
+            <div class="kpi-card-body">
+                <canvas id="materialConsumptionChart" height="100"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="kpi-card">
+            <div class="kpi-card-header">
+                <h3 class="kpi-card-title">
+                    <i class="bi bi-speedometer2"></i>
+                    Kapazitätsauslastung (7 Tage)
+                </h3>
+            </div>
+            <div class="kpi-card-body">
+                <canvas id="capacityChart" height="100"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- OEE Components & Lead Time -->
+<div class="row g-4 mb-4">
+    <div class="col-lg-6">
+        <div class="kpi-card">
+            <div class="kpi-card-header">
+                <h3 class="kpi-card-title">
+                    <i class="bi bi-pie-chart-fill"></i>
+                    OEE-Komponenten
+                </h3>
+            </div>
+            <div class="kpi-card-body">
+                <canvas id="oeeComponentsChart" height="100"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="kpi-card">
+            <div class="kpi-card-header">
+                <h3 class="kpi-card-title">
+                    <i class="bi bi-clock-history"></i>
+                    Durchlaufzeiten (Lead Time)
+                </h3>
+                <span class="badge bg-primary">Ø {{ avg_lead_time }}h</span>
+            </div>
+            <div class="kpi-card-body">
+                <canvas id="leadTimeChart" height="100"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Chart.js Charts for Overview Tab
+document.addEventListener('DOMContentLoaded', function() {
+    
+    // Material Consumption Chart
+    if (document.getElementById('materialConsumptionChart')) {
+        new Chart(document.getElementById('materialConsumptionChart'), {
+            type: 'doughnut',
+            data: {
+                labels: {{ material_consumption_chart.labels | tojson }},
+                datasets: [{
+                    data: {{ material_consumption_chart.data | tojson }},
+                    backgroundColor: [
+                        'rgba(102, 126, 234, 0.8)',
+                        'rgba(56, 239, 125, 0.8)',
+                        'rgba(244, 92, 67, 0.8)',
+                        'rgba(13, 202, 240, 0.8)',
+                        'rgba(255, 193, 7, 0.8)'
+                    ]
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'right',
+                        labels: { color: '#adb5bd', padding: 15 }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return context.label + ': ' + context.parsed + ' kg';
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // Capacity Chart
+    if (document.getElementById('capacityChart')) {
+        new Chart(document.getElementById('capacityChart'), {
+            type: 'line',
+            data: {
+                labels: {{ capacity_chart.labels | tojson }},
+                datasets: [{
+                    label: 'Auslastung %',
+                    data: {{ capacity_chart.data | tojson }},
+                    borderColor: 'rgba(102, 126, 234, 1)',
+                    backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        ticks: {
+                            callback: function(value) {
+                                return value + '%';
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // OEE Components Chart
+    if (document.getElementById('oeeComponentsChart')) {
+        new Chart(document.getElementById('oeeComponentsChart'), {
+            type: 'radar',
+            data: {
+                labels: {{ oee_components_chart.labels | tojson }},
+                datasets: [{
+                    label: 'OEE',
+                    data: {{ oee_components_chart.data | tojson }},
+                    borderColor: 'rgba(56, 239, 125, 1)',
+                    backgroundColor: 'rgba(56, 239, 125, 0.2)',
+                    pointBackgroundColor: 'rgba(56, 239, 125, 1)',
+                    pointBorderColor: '#fff',
+                    pointHoverBackgroundColor: '#fff',
+                    pointHoverBorderColor: 'rgba(56, 239, 125, 1)'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    r: {
+                        beginAtZero: true,
+                        max: 100,
+                        ticks: {
+                            stepSize: 20,
+                            callback: function(value) {
+                                return value + '%';
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // Lead Time Chart
+    if (document.getElementById('leadTimeChart')) {
+        new Chart(document.getElementById('leadTimeChart'), {
+            type: 'bar',
+            data: {
+                labels: {{ lead_time_chart.labels | tojson }},
+                datasets: [{
+                    label: 'Stunden',
+                    data: {{ lead_time_chart.data | tojson }},
+                    backgroundColor: 'rgba(13, 202, 240, 0.8)',
+                    borderRadius: 8
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(value) {
+                                return value + 'h';
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // Production Trend Chart
+    if (document.getElementById('productionTrendChart')) {
+        new Chart(document.getElementById('productionTrendChart'), {
+            type: 'line',
+            data: {
+                labels: ['Tag 1', 'Tag 2', 'Tag 3', 'Tag 4', 'Tag 5', 'Tag 6', 'Tag 7'],
+                datasets: [{
+                    label: 'Erfolgreiche Jobs',
+                    data: [12, 15, 13, 18, 16, 20, 17],
+                    borderColor: 'rgba(56, 239, 125, 1)',
+                    backgroundColor: 'rgba(56, 239, 125, 0.1)',
+                    fill: true,
+                    tension: 0.4
+                }, {
+                    label: 'Fehlgeschlagene Jobs',
+                    data: [1, 2, 1, 0, 1, 1, 2],
+                    borderColor: 'rgba(244, 92, 67, 1)',
+                    backgroundColor: 'rgba(244, 92, 67, 0.1)',
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        labels: { color: '#adb5bd' }
+                    }
+                }
+            }
+        });
+    }
+});
+</script>

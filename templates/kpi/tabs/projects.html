@@ -1,0 +1,117 @@
+<!-- Projects Tab Content -->
+<div class="row g-4 mb-4">
+    <!-- Project Stats -->
+    <div class="col-lg-3 col-md-6">
+        <div class="metric-box">
+            <div class="metric-box-label">Projekte Gesamt</div>
+            <div class="metric-box-value" style="color: #667eea;">{{ total_projects }}</div>
+        </div>
+    </div>
+
+    <div class="col-lg-3 col-md-6">
+        <div class="metric-box">
+            <div class="metric-box-label">Aktiv</div>
+            <div class="metric-box-value" style="color: #38ef7d;">{{ active_projects }}</div>
+        </div>
+    </div>
+
+    <div class="col-lg-3 col-md-6">
+        <div class="metric-box">
+            <div class="metric-box-label">Abgeschlossen</div>
+            <div class="metric-box-value" style="color: #0dcaf0;">{{ completed_projects }}</div>
+        </div>
+    </div>
+
+    <div class="col-lg-3 col-md-6">
+        <div class="metric-box">
+            <div class="metric-box-label">At Risk</div>
+            <div class="metric-box-value" style="color: {% if projects_at_risk > 0 %}#f45c43{% else %}#38ef7d{% endif %};">
+                {{ projects_at_risk }}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Project Success Rate -->
+<div class="row g-4 mb-4">
+    <div class="col-lg-12">
+        <div class="kpi-card">
+            <div class="kpi-card-header">
+                <h3 class="kpi-card-title">
+                    <i class="bi bi-trophy-fill"></i>
+                    Projekt-Erfolgsrate
+                </h3>
+                <span class="performance-badge {% if project_success_rate >= 90 %}excellent{% elif project_success_rate >= 70 %}good{% else %}warning{% endif %}">
+                    {{ project_success_rate }}%
+                </span>
+            </div>
+            <div class="kpi-card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h5 class="text-white mb-3">Termingerechte Abschlüsse</h5>
+                        <div class="progress mb-2" style="height: 30px;">
+                            <div class="progress-bar bg-success" style="width: {{ project_success_rate }}%;">
+                                <strong>{{ project_success_rate }}% pünktlich</strong>
+                            </div>
+                        </div>
+                        <p class="text-muted small">Projekte die vor oder zum Deadline fertig wurden</p>
+                    </div>
+                    <div class="col-md-6">
+                        <h5 class="text-white mb-3">Status-Übersicht</h5>
+                        <div class="d-flex justify-content-around text-center">
+                            <div>
+                                <h3 class="text-success">{{ completed_projects }}</h3>
+                                <small class="text-muted">Fertig</small>
+                            </div>
+                            <div>
+                                <h3 class="text-primary">{{ active_projects }}</h3>
+                                <small class="text-muted">Laufend</small>
+                            </div>
+                            <div>
+                                <h3 class="text-danger">{{ projects_at_risk }}</h3>
+                                <small class="text-muted">Risiko</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Deadline Warnings -->
+{% if projects_at_risk > 0 %}
+<div class="row g-4">
+    <div class="col-lg-12">
+        <div class="kpi-card">
+            <div class="kpi-card-header">
+                <h3 class="kpi-card-title">
+                    <i class="bi bi-exclamation-triangle-fill text-danger"></i>
+                    Deadline-Warnungen
+                </h3>
+            </div>
+            <div class="kpi-card-body">
+                <div class="alert alert-warning">
+                    <i class="bi bi-info-circle-fill me-2"></i>
+                    <strong>{{ projects_at_risk }}</strong> Projekt(e) haben kritische Deadlines oder sind überfällig.
+                    <a href="{{ url_for('projects_bp.list_projects') }}" class="alert-link ms-2">
+                        Zur Projekt-Übersicht →
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="row g-4">
+    <div class="col-lg-12">
+        <div class="kpi-card">
+            <div class="kpi-card-body text-center py-5">
+                <i class="bi bi-check-circle-fill text-success" style="font-size: 4rem;"></i>
+                <h4 class="text-white mt-3">Alle Projekte im Zeitplan! 🎉</h4>
+                <p class="text-muted">Keine Deadline-Warnungen oder überfällige Projekte.</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
