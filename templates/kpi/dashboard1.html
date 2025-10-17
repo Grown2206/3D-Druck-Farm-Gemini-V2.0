@@ -1,0 +1,791 @@
+{% extends "base.html" %}
+
+{% block title %}KPI Dashboard{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
+<style>
+    body {
+        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+        min-height: 100vh;
+    }
+
+    .dashboard-header {
+        background: rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(10px);
+        border-radius: 16px;
+        padding: 2rem;
+        margin-bottom: 2rem;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .dashboard-title {
+        font-size: 2.5rem;
+        font-weight: 700;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin: 0;
+    }
+
+    .dashboard-subtitle {
+        color: #adb5bd;
+        margin-top: 0.5rem;
+    }
+
+    .realtime-indicator {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.875rem;
+        color: #38ef7d;
+        margin-top: 1rem;
+    }
+
+    .realtime-pulse {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #38ef7d;
+        animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.5; transform: scale(1.2); }
+    }
+
+    .stat-card {
+        background: rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(10px);
+        border-radius: 16px;
+        padding: 1.5rem;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        transition: all 0.3s ease;
+        height: 100%;
+    }
+
+    .stat-card:hover {
+        transform: translateY(-5px);
+        border-color: rgba(102, 126, 234, 0.5);
+        box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+    }
+
+    .stat-icon {
+        width: 60px;
+        height: 60px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        margin-bottom: 1rem;
+    }
+
+    .stat-icon.primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+    .stat-icon.success { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); }
+    .stat-icon.info { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
+    .stat-icon.warning { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
+
+    .stat-label {
+        font-size: 0.875rem;
+        color: #adb5bd;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 0.5rem;
+    }
+
+    .stat-value {
+        font-size: 2rem;
+        font-weight: 700;
+        color: #fff;
+        margin-bottom: 0.5rem;
+    }
+
+    .stat-change {
+        font-size: 0.875rem;
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+    }
+
+    .stat-change.positive { color: #38ef7d; }
+    .stat-change.negative { color: #f45c43; }
+
+    .nav-tabs {
+        border: none;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 12px;
+        padding: 0.5rem;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        margin-bottom: 2rem;
+    }
+
+    .nav-tabs .nav-link {
+        border: none;
+        color: #adb5bd;
+        padding: 0.75rem 1.5rem;
+        border-radius: 8px;
+        font-weight: 600;
+        transition: all 0.3s;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .nav-tabs .nav-link:hover {
+        color: #e9ecef;
+        background: rgba(13, 110, 253, 0.1);
+    }
+
+    .nav-tabs .nav-link.active {
+        background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%);
+        color: white;
+        box-shadow: 0 4px 6px rgba(13, 110, 253, 0.3);
+    }
+
+    .kpi-card {
+        background: rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(10px);
+        border-radius: 16px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        height: 100%;
+    }
+
+    .kpi-card-header {
+        margin-bottom: 1rem;
+        padding-bottom: 1rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .kpi-card-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: #fff;
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .chart-container {
+        position: relative;
+        height: 350px;
+    }
+
+    .metric-box {
+        background: rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(10px);
+        border-radius: 12px;
+        padding: 1rem;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        text-align: center;
+        transition: all 0.3s ease;
+        margin-bottom: 1rem;
+    }
+
+    .metric-box:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    }
+
+    .metric-box-label {
+        font-size: 0.75rem;
+        color: #adb5bd;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 0.5rem;
+    }
+
+    .metric-box-value {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: #fff;
+        margin: 0.5rem 0;
+    }
+
+    .metric-box-subtitle {
+        font-size: 0.75rem;
+        color: #6c757d;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="dashboard-header">
+        <h1 class="dashboard-title">📊 KPI Dashboard</h1>
+        <p class="dashboard-subtitle">Echtzeit-Überwachung Ihrer 3D-Druck-Farm</p>
+        <div class="realtime-indicator">
+            <span class="realtime-pulse"></span>
+            <span>Live-Daten</span>
+        </div>
+    </div>
+
+    <!-- Stats Cards Row -->
+    <div class="row g-4 mb-4">
+        <div class="col-lg-3 col-md-6">
+            <div class="stat-card">
+                <div class="stat-icon primary">
+                    <i class="bi bi-printer-fill"></i>
+                </div>
+                <div class="stat-label">Farm Success Rate (30d)</div>
+                <div class="stat-value">{{ farm_success_rate_30d }}%</div>
+                <div class="stat-change positive">
+                    <i class="bi bi-arrow-up-circle-fill"></i>
+                    <span>+3.2% vs Vormonat</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-3 col-md-6">
+            <div class="stat-card">
+                <div class="stat-icon success">
+                    <i class="bi bi-check-circle-fill"></i>
+                </div>
+                <div class="stat-label">Abgeschlossene Aufträge</div>
+                <div class="stat-value">{{ total_completed_30d }}</div>
+                <div class="stat-change positive">
+                    <i class="bi bi-arrow-up-circle-fill"></i>
+                    <span>{{ job_throughput_30d }}/Tag</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-3 col-md-6">
+            <div class="stat-card">
+                <div class="stat-icon info">
+                    <i class="bi bi-hourglass-split"></i>
+                </div>
+                <div class="stat-label">Ausstehende Aufträge</div>
+                <div class="stat-value">{{ pending_jobs_count }}</div>
+                <div class="stat-change">
+                    <i class="bi bi-dash-circle"></i>
+                    <span>In Warteschlange</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-3 col-md-6">
+            <div class="stat-card">
+                <div class="stat-icon warning">
+                    <i class="bi bi-lightning-fill"></i>
+                </div>
+                <div class="stat-label">Drucker Online</div>
+                <div class="stat-value">{{ live_status['printing'] + live_status['idle'] }} / {{ live_status['total'] }}</div>
+                <div class="stat-change {% if live_status['printing'] > 0 %}positive{% endif %}">
+                    <i class="bi bi-circle-fill"></i>
+                    <span>{{ live_status['printing'] }} drucken aktiv</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabs Navigation -->
+    <ul class="nav nav-tabs" id="dashboardTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="overview-tab" data-bs-toggle="tab" data-bs-target="#overview" type="button" role="tab">
+                <i class="bi bi-grid-3x3-gap-fill"></i> Übersicht
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="production-tab" data-bs-toggle="tab" data-bs-target="#production" type="button" role="tab">
+                <i class="bi bi-graph-up"></i> Produktion
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="printers-tab" data-bs-toggle="tab" data-bs-target="#printers" type="button" role="tab">
+                <i class="bi bi-printer-fill"></i> Drucker
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="materials-tab" data-bs-toggle="tab" data-bs-target="#materials" type="button" role="tab">
+                <i class="bi bi-disc-fill"></i> Material
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="performance-tab" data-bs-toggle="tab" data-bs-target="#performance" type="button" role="tab">
+                <i class="bi bi-speedometer"></i> Performance
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="costs-tab" data-bs-toggle="tab" data-bs-target="#costs" type="button" role="tab">
+                <i class="bi bi-currency-euro"></i> Kosten & ROI
+            </button>
+        </li>
+    </ul>
+
+    <!-- Tab Content -->
+    <div class="tab-content" id="dashboardTabsContent">
+        <!-- OVERVIEW TAB -->
+        <div class="tab-pane fade show active" id="overview" role="tabpanel">
+            <div class="row g-4">
+                <div class="col-lg-8">
+                    <div class="kpi-card">
+                        <div class="kpi-card-header">
+                            <h3 class="kpi-card-title">
+                                <i class="bi bi-bar-chart-line-fill"></i>
+                                Produktionstrend (30 Tage)
+                            </h3>
+                        </div>
+                        <div class="chart-container" id="production-trend-chart"></div>
+                    </div>
+                </div>
+
+                <div class="col-lg-4">
+                    <div class="kpi-card">
+                        <div class="kpi-card-header">
+                            <h3 class="kpi-card-title">
+                                <i class="bi bi-clock-history"></i>
+                                Farm Aktivität
+                            </h3>
+                        </div>
+                        <div class="metric-box">
+                            <div class="metric-box-label">Gesamte Druckstunden</div>
+                            <div class="metric-box-value">{{ total_print_hours_all_time }}h</div>
+                            <div class="metric-box-subtitle">Alle Drucker</div>
+                        </div>
+                        <div class="metric-box">
+                            <div class="metric-box-label">Filamentverbrauch</div>
+                            <div class="metric-box-value">{{ total_filament_all_time_kg }} kg</div>
+                            <div class="metric-box-subtitle">Gesamt</div>
+                        </div>
+                        <div class="metric-box">
+                            <div class="metric-box-label">Abgeschlossene Drucke</div>
+                            <div class="metric-box-value">{{ total_printed_jobs_all_time }}</div>
+                            <div class="metric-box-subtitle">Lebensdauer</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-lg-6">
+                    <div class="kpi-card">
+                        <div class="kpi-card-header">
+                            <h3 class="kpi-card-title">
+                                <i class="bi bi-graph-up"></i>
+                                ROI pro Drucker
+                            </h3>
+                        </div>
+                        <div class="chart-container" id="roi-chart"></div>
+                    </div>
+                </div>
+
+                <div class="col-lg-6">
+                    <div class="kpi-card">
+                        <div class="kpi-card-header">
+                            <h3 class="kpi-card-title">
+                                <i class="bi bi-lightning-fill"></i>
+                                Energiekosten
+                            </h3>
+                        </div>
+                        <div class="chart-container" id="energy-costs-chart"></div>
+                    </div>
+                </div>
+
+                <div class="col-lg-6">
+                    <div class="kpi-card">
+                        <div class="kpi-card-header">
+                            <h3 class="kpi-card-title">
+                                <i class="bi bi-calendar-month"></i>
+                                Monatliche Kosten
+                            </h3>
+                        </div>
+                        <div class="chart-container" id="monthly-costs-chart"></div>
+                    </div>
+                </div>
+
+                <div class="col-lg-6">
+                    <div class="kpi-card">
+                        <div class="kpi-card-header">
+                            <h3 class="kpi-card-title">
+                                <i class="bi bi-tools"></i>
+                                Wartung vs. Produktion
+                            </h3>
+                        </div>
+                        <div class="chart-container" id="maintenance-vs-production-chart"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block head_extra %}
+<script src="https://cdn.jsdelivr.net/npm/apexcharts@3.45.0/dist/apexcharts.min.js"></script>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='dashboard.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Dashboard geladen - Initialisiere Charts...');
+    console.log('ApexCharts verfügbar:', typeof ApexCharts !== 'undefined');
+    
+    const dashboardData = {
+        material_trend_chart: {{ material_trend_chart|tojson }},
+        uptime_chart_data: {{ uptime_chart_data|tojson }},
+        cost_chart_data: {{ cost_chart_data|tojson }},
+        failures_by_material_chart: {{ failures_by_material_chart|tojson }},
+        print_hours_per_printer_chart: {{ print_hours_per_printer_chart|tojson }},
+        material_consumption_chart: {{ material_consumption_chart|tojson }},
+        material_efficiency_chart: {{ material_efficiency_chart|tojson }},
+        top_filaments_chart: {{ top_filaments_chart|tojson }},
+        success_rate_material_chart: {{ success_rate_material_chart|tojson }},
+        jobs_by_weekday_chart: {{ jobs_by_weekday_chart|tojson }},
+        avg_job_times_chart: {{ avg_job_times_chart|tojson }},
+        maintenance_by_type_chart: {{ maintenance_by_type_chart|tojson }},
+        stock_by_material_chart: {{ stock_by_material_chart|tojson }},
+        production_trend_chart: {{ production_trend_chart|tojson }},
+        costs_per_printer_chart: {{ costs_per_printer_chart|tojson }},
+        oee_components_chart: {{ oee_components_chart|tojson }},
+        capacity_chart: {{ capacity_chart|tojson }},
+        lead_time_chart: {{ lead_time_chart|tojson }},
+        cost_breakdown_chart: {{ cost_breakdown_chart|tojson }},
+        energy_costs_chart: {{ energy_costs_chart|tojson }},
+        roi_chart: {{ roi_chart|tojson }},
+        monthly_costs_chart: {{ monthly_costs_chart|tojson }},
+        maintenance_vs_production_chart: {{ maintenance_vs_production_chart|tojson }}
+    };
+
+    console.log('Initialisiere KPI Dashboard mit Daten:', dashboardData);
+    
+    // Initialisiere Charts
+    if (typeof initDashboardCharts === 'function') {
+        initDashboardCharts(dashboardData);
+    } else {
+        console.error('initDashboardCharts Funktion nicht gefunden!');
+    }
+});
+</script>
+{% endblock %}<div class="kpi-card">
+                        <div class="kpi-card-header">
+                            <h3 class="kpi-card-title">
+                                <i class="bi bi-calendar-week"></i>
+                                Aufträge nach Wochentag
+                            </h3>
+                        </div>
+                        <div class="chart-container" id="jobs-by-weekday-chart"></div>
+                    </div>
+                </div>
+
+                <div class="col-lg-6">
+                    <div class="kpi-card">
+                        <div class="kpi-card-header">
+                            <h3 class="kpi-card-title">
+                                <i class="bi bi-speedometer2"></i>
+                                Durchschnittliche Druckzeiten
+                            </h3>
+                        </div>
+                        <div class="chart-container" id="avg-job-times-chart"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- PRODUCTION TAB -->
+        <div class="tab-pane fade" id="production" role="tabpanel">
+            <div class="row g-4">
+                <div class="col-lg-12">
+                    <div class="kpi-card">
+                        <div class="kpi-card-header">
+                            <h3 class="kpi-card-title">
+                                <i class="bi bi-pie-chart-fill"></i>
+                                Drucker-Uptime Verteilung
+                            </h3>
+                        </div>
+                        <div class="chart-container" id="uptime-chart"></div>
+                    </div>
+                </div>
+
+                <div class="col-lg-6">
+                    <div class="kpi-card">
+                        <div class="kpi-card-header">
+                            <h3 class="kpi-card-title">
+                                <i class="bi bi-hourglass-split"></i>
+                                Druckstunden pro Drucker
+                            </h3>
+                        </div>
+                        <div class="chart-container" id="print-hours-printer-chart"></div>
+                    </div>
+                </div>
+
+                <div class="col-lg-6">
+                    <div class="kpi-card">
+                        <div class="kpi-card-header">
+                            <h3 class="kpi-card-title">
+                                <i class="bi bi-exclamation-triangle-fill"></i>
+                                Fehler nach Material
+                            </h3>
+                        </div>
+                        <div class="chart-container" id="failures-by-material-chart"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- PRINTERS TAB -->
+        <div class="tab-pane fade" id="printers" role="tabpanel">
+            <div class="row g-4">
+                <div class="col-lg-6">
+                    <div class="kpi-card">
+                        <div class="kpi-card-header">
+                            <h3 class="kpi-card-title">
+                                <i class="bi bi-tools"></i>
+                                Wartungsaktivitäten
+                            </h3>
+                        </div>
+                        <div class="chart-container" id="maintenance-by-type-chart"></div>
+                    </div>
+                </div>
+
+                <div class="col-lg-6">
+                    <div class="kpi-card">
+                        <div class="kpi-card-header">
+                            <h3 class="kpi-card-title">
+                                <i class="bi bi-currency-euro"></i>
+                                Kosten pro Drucker
+                            </h3>
+                        </div>
+                        <div class="chart-container" id="costs-per-printer-chart"></div>
+                    </div>
+                </div>
+
+                <div class="col-lg-12">
+                    <div class="kpi-card">
+                        <div class="kpi-card-header">
+                            <h3 class="kpi-card-title">
+                                <i class="bi bi-clipboard-data"></i>
+                                Drucker Performance Details
+                            </h3>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-dark table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Drucker</th>
+                                        <th>Status</th>
+                                        <th>Erfolgsrate</th>
+                                        <th>Druckstunden</th>
+                                        <th>Aufträge</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for printer in printer_performance %}
+                                    <tr>
+                                        <td><strong>{{ printer['name'] }}</strong></td>
+                                        <td>
+                                            <span class="badge {% if printer['status'] == 'PRINTING' %}bg-success{% elif printer['status'] == 'IDLE' %}bg-info{% else %}bg-secondary{% endif %}">
+                                                {{ printer['status'] }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span class="{% if printer['success_rate'] >= 90 %}text-success{% elif printer['success_rate'] >= 75 %}text-warning{% else %}text-danger{% endif %}">
+                                                {{ printer['success_rate'] }}%
+                                            </span>
+                                        </td>
+                                        <td>{{ printer['total_hours'] }}h</td>
+                                        <td>{{ printer['total_jobs'] }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- MATERIALS TAB -->
+        <div class="tab-pane fade" id="materials" role="tabpanel">
+            <div class="row g-4">
+                <div class="col-lg-4">
+                    <div class="kpi-card">
+                        <div class="kpi-card-header">
+                            <h3 class="kpi-card-title">
+                                <i class="bi bi-box-seam"></i>
+                                Lagerbestand
+                            </h3>
+                        </div>
+                        <div class="chart-container" id="stock-by-material-chart"></div>
+                    </div>
+                </div>
+
+                <div class="col-lg-8">
+                    <div class="kpi-card">
+                        <div class="kpi-card-header">
+                            <h3 class="kpi-card-title">
+                                <i class="bi bi-pie-chart-fill"></i>
+                                Materialverbrauch
+                            </h3>
+                        </div>
+                        <div class="chart-container" id="material-consumption-chart"></div>
+                    </div>
+                </div>
+
+                <div class="col-lg-6">
+                    <div class="kpi-card">
+                        <div class="kpi-card-header">
+                            <h3 class="kpi-card-title">
+                                <i class="bi bi-star-fill"></i>
+                                Top 5 Filamente
+                            </h3>
+                        </div>
+                        <div class="chart-container" id="top-filaments-chart"></div>
+                    </div>
+                </div>
+
+                <div class="col-lg-6">
+                    <div class="kpi-card">
+                        <div class="kpi-card-header">
+                            <h3 class="kpi-card-title">
+                                <i class="bi bi-percent"></i>
+                                Erfolgsrate nach Material
+                            </h3>
+                        </div>
+                        <div class="chart-container" id="success-rate-material-chart"></div>
+                    </div>
+                </div>
+
+                <div class="col-lg-6">
+                    <div class="kpi-card">
+                        <div class="kpi-card-header">
+                            <h3 class="kpi-card-title">
+                                <i class="bi bi-graph-up"></i>
+                                Material-Trend (30 Tage)
+                            </h3>
+                        </div>
+                        <div class="chart-container" id="material-trend-chart"></div>
+                    </div>
+                </div>
+
+                <div class="col-lg-6">
+                    <div class="kpi-card">
+                        <div class="kpi-card-header">
+                            <h3 class="kpi-card-title">
+                                <i class="bi bi-recycle"></i>
+                                Material-Effizienz
+                            </h3>
+                        </div>
+                        <div class="chart-container" id="material-efficiency-chart"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- PERFORMANCE TAB -->
+        <div class="tab-pane fade" id="performance" role="tabpanel">
+            <div class="row g-4 mb-4">
+                <div class="col-lg-3 col-md-6">
+                    <div class="metric-box">
+                        <div class="metric-box-label">OEE Score</div>
+                        <div class="metric-box-value">{{ oee_score }}%</div>
+                        <div class="metric-box-subtitle">Overall Equipment Effectiveness</div>
+                    </div>
+                </div>
+                <div class="col-lg-3 col-md-6">
+                    <div class="metric-box">
+                        <div class="metric-box-label">MTBF</div>
+                        <div class="metric-box-value">{{ mtbf_hours }}h</div>
+                        <div class="metric-box-subtitle">Mean Time Between Failures</div>
+                    </div>
+                </div>
+                <div class="col-lg-3 col-md-6">
+                    <div class="metric-box">
+                        <div class="metric-box-label">First Pass Yield</div>
+                        <div class="metric-box-value">{{ first_pass_yield }}%</div>
+                        <div class="metric-box-subtitle">Erfolg beim ersten Versuch</div>
+                    </div>
+                </div>
+                <div class="col-lg-3 col-md-6">
+                    <div class="metric-box">
+                        <div class="metric-box-label">Ø Lead Time</div>
+                        <div class="metric-box-value">{{ avg_lead_time }}h</div>
+                        <div class="metric-box-subtitle">Durchlaufzeit</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row g-4">
+                <div class="col-lg-6">
+                    <div class="kpi-card">
+                        <div class="kpi-card-header">
+                            <h3 class="kpi-card-title">
+                                <i class="bi bi-bar-chart"></i>
+                                OEE Komponenten
+                            </h3>
+                        </div>
+                        <div class="chart-container" id="oee-components-chart"></div>
+                    </div>
+                </div>
+
+                <div class="col-lg-6">
+                    <div class="kpi-card">
+                        <div class="kpi-card-header">
+                            <h3 class="kpi-card-title">
+                                <i class="bi bi-speedometer2"></i>
+                                Kapazitätsauslastung
+                            </h3>
+                        </div>
+                        <div class="chart-container" id="capacity-chart"></div>
+                    </div>
+                </div>
+
+                <div class="col-lg-12">
+                    <div class="kpi-card">
+                        <div class="kpi-card-header">
+                            <h3 class="kpi-card-title">
+                                <i class="bi bi-hourglass-split"></i>
+                                Durchlaufzeit nach Auftrag
+                            </h3>
+                        </div>
+                        <div class="chart-container" id="lead-time-chart"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- COSTS TAB -->
+        <div class="tab-pane fade" id="costs" role="tabpanel">
+            <div class="row g-4 mb-4">
+                <div class="col-lg-4">
+                    <div class="metric-box">
+                        <div class="metric-box-label">Gesamtkosten (30d)</div>
+                        <div class="metric-box-value">{{ total_cost_sum }} €</div>
+                        <div class="metric-box-subtitle">Material + Maschine + Energie</div>
+                    </div>
+                </div>
+                <div class="col-lg-4">
+                    <div class="metric-box">
+                        <div class="metric-box-label">Kosten pro Teil</div>
+                        <div class="metric-box-value">{{ cost_per_part }} €</div>
+                        <div class="metric-box-subtitle">Durchschnitt</div>
+                    </div>
+                </div>
+                <div class="col-lg-4">
+                    <div class="metric-box">
+                        <div class="metric-box-label">Materialkosten</div>
+                        <div class="metric-box-value">{{ total_material_cost }} €</div>
+                        <div class="metric-box-subtitle">30 Tage</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row g-4">
+                <div class="col-lg-6">
+                    <div class="kpi-card">
+                        <div class="kpi-card-header">
+                            <h3 class="kpi-card-title">
+                                <i class="bi bi-pie-chart-fill"></i>
+                                Kostenverteilung
+                            </h3>
+                        </div>
+                        <div class="chart-container" id="cost-breakdown-chart"></div>
+                    </div>
+                </div>
+
+                <div class="col-lg-6">
+                    

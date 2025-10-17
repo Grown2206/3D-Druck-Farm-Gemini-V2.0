@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D-Druck-Farm Management System - Präsentation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            overflow: hidden;
+        }
+
+        .presentation-container {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        .slide {
+            background: white;
+            width: 90%;
+            max-width: 1200px;
+            height: 90vh;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 60px;
+            display: none;
+            flex-direction: column;
+            position: relative;
+            animation: slideIn 0.5s ease-out;
+        }
+
+        .slide.active {
+            display: flex;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(100px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .slide-header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .slide-title {
+            font-size: 3rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 20px;
+            font-weight: 700;
+        }
+
+        .slide-subtitle {
+            font-size: 1.5rem;
+            color: #6c757d;
+        }
+
+        .slide-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 30px;
+            margin-top: 20px;
+        }
+
+        .feature-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 30px;
+            border-radius: 15px;
+            color: white;
+            transition: transform 0.3s, box-shadow 0.3s;
+            cursor: pointer;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-10px) scale(1.02);
+            box-shadow: 0 15px 40px rgba(102, 126, 234, 0.4);
+        }
+
+        .feature-icon {
+            font-size: 3rem;
+            margin-bottom: 15px;
+        }
+
+        .feature-title {
+            font-size: 1.5rem;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+
+        .feature-description {
+            font-size: 1rem;
+            opacity: 0.9;
+            line-height: 1.6;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+            margin: 40px 0;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            color: white;
+            transition: transform 0.3s;
+        }
+
+        .stat-card:hover {
+            transform: scale(1.05);
+        }
+
+        .stat-number {
+            font-size: 3rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        .stat-label {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .tech-stack {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 30px;
+        }
+
+        .tech-badge {
+            background: white;
+            padding: 15px 30px;
+            border-radius: 25px;
+            font-weight: 600;
+            color: #667eea;
+            border: 2px solid #667eea;
+            transition: all 0.3s;
+        }
+
+        .tech-badge:hover {
+            background: #667eea;
+            color: white;
+            transform: scale(1.1);
+        }
+
+        .navigation {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 2px solid #e9ecef;
+        }
+
+        .nav-button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            border-radius: 30px;
+            font-size: 1.1rem;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 600;
+        }
+
+        .nav-button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+        }
+
+        .nav-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .slide-counter {
+            font-size: 1.2rem;
+            color: #6c757d;
+            font-weight: 600;
+        }
+
+        .architecture-diagram {
+            background: #f8f9fa;
+            padding: 30px;
+            border-radius: 15px;
+            margin: 20px 0;
+        }
+
+        .layer {
+            background: white;
+            padding: 20px;
+            margin: 15px 0;
+            border-radius: 10px;
+            border-left: 5px solid #667eea;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .layer-title {
+            font-size: 1.3rem;
+            color: #667eea;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .layer-content {
+            color: #6c757d;
+            line-height: 1.8;
+        }
+
+        .benefits-list {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .benefit-item {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            padding: 25px;
+            border-radius: 12px;
+            color: white;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            transition: transform 0.3s;
+        }
+
+        .benefit-item:hover {
+            transform: translateX(10px);
+        }
+
+        .benefit-icon {
+            font-size: 2rem;
+        }
+
+        .benefit-text {
+            font-size: 1.1rem;
+            font-weight: 500;
+        }
+
+        .workflow-steps {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 30px 0;
+            position: relative;
+        }
+
+        .workflow-step {
+            flex: 1;
+            text-align: center;
+            position: relative;
+            z-index: 1;
+        }
+
+        .workflow-step::after {
+            content: '→';
+            position: absolute;
+            right: -25%;
+            top: 30%;
+            font-size: 2rem;
+            color: #667eea;
+            font-weight: bold;
+        }
+
+        .workflow-step:last-child::after {
+            display: none;
+        }
+
+        .step-circle {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 15px;
+            color: white;
+            font-size: 2rem;
+            font-weight: 700;
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+            transition: transform 0.3s;
+        }
+
+        .workflow-step:hover .step-circle {
+            transform: scale(1.2) rotate(360deg);
+        }
+
+        .step-label {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #495057;
+        }
+
+        .cta-section {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 40px;
+            border-radius: 15px;
+            text-align: center;
+            color: white;
+            margin-top: 30px;
+        }
+
+        .cta-title {
+            font-size: 2rem;
+            margin-bottom: 20px;
+            font-weight: 700;
+        }
+
+        .cta-text {
+            font-size: 1.2rem;
+            margin-bottom: 30px;
+            opacity: 0.95;
+        }
+
+        .cta-button {
+            background: white;
+            color: #667eea;
+            padding: 20px 50px;
+            border-radius: 30px;
+            border: none;
+            font-size: 1.2rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .cta-button:hover {
+            transform: scale(1.1);
+            box-shadow: 0 10px 30px rgba(255, 255, 255, 0.3);
+        }
+
+        .hotkey-hint {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 15px 25px;
+            border-radius: 10px;
+            font-size: 0.9rem;
+        }
+
+        @media (max-width: 768px) {
+            .slide {
+                padding: 30px;
+            }
+
+            .slide-title {
+                font-size: 2rem;
+            }
+
+            .feature-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .workflow-steps {
+                flex-direction: column;
+            }
+
+            .workflow-step::after {
+                display: none;
+            }
+        }
+
+        .highlight {
+            background: linear-gradient(135deg, #ffeaa7 0%, #fdcb6e 100%);
+            padding: 3px 8px;
+            border-radius: 5px;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="presentation-container">
+        <!-- Slide 1: Title -->
+        <div class="slide active">
+            <div class="slide-header">
+                <h1 class="slide-title">🚀 3D-Druck-Farm Management System</h1>
+                <p class="slide-subtitle">Die All-in-One Lösung für professionelle 3D-Druck-Produktion</p>
+            </div>
+            <div class="slide-content">
+                <div class="stats-grid">
+                    <div class="stat-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                        <div class="stat-number">15+</div>
+                        <div class="stat-label">Module</div>
+                    </div>
+                    <div class="stat-card" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);">
+                        <div class="stat-number">∞</div>
+                        <div class="stat-label">Drucker</div>
+                    </div>
+                    <div class="stat-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                        <div class="stat-number">24/7</div>
+                        <div class="stat-label">Live-Monitoring</div>
+                    </div>
+                    <div class="stat-card" style="background: linear-gradient(135deg, #fad0c4 0%, #ffd1ff 100%);">
+                        <div class="stat-number">100%</div>
+                        <div class="stat-label">Open Source</div>
+                    </div>
+                </div>
+
+                <div class="cta-section">
+                    <h2 class="cta-title">🎯 Ihre komplette Produktionssteuerung</h2>
+                    <p class="cta-text">Von der Auftragserfassung bis zur Qualitätskontrolle – alles in einer Plattform</p>
+                </div>
+            </div>
+            <div class="navigation">
+                <button class="nav-button" onclick="previousSlide()" disabled>← Zurück</button>
+                <span class="slide-counter"><span id="currentSlide">1</span> / <span id="totalSlides">8</span></span>
+                <button class="nav-button" onclick="nextSlide()">Weiter →</button>
+            </div>
+        </div>
+
+        <!-- Slide 2: Kernfunktionen -->
+        <div class="slide">
+            <div class="slide-header">
+                <h1 class="slide-title">⚡ Kernfunktionen</h1>
+                <p class="slide-subtitle">Alles was Sie für eine professionelle 3D-Druck-Farm brauchen</p>
+            </div>
+            <div class="slide-content">
+                <div class="feature-grid">
+                    <div class="feature-card">
+                        <div class="feature-icon">📊</div>
+                        <div class="feature-title">Dashboard</div>
+                        <div class="feature-description">Live-Überwachung aller Drucker, Aufträge und KPIs in Echtzeit mit erweiterten Analytics</div>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">📋</div>
+                        <div class="feature-title">Auftragsmanagement</div>
+                        <div class="feature-description">Erstellen, priorisieren und verwalten Sie Druckaufträge mit CSV-Import und intelligenter Zuweisung</div>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">🖨️</div>
+                        <div class="feature-title">Drucker-Steuerung</div>
+                        <div class="feature-description">Zentrale Verwaltung beliebig vieler 3D-Drucker mit API-Integration (Klipper, OctoPrint)</div>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">💎</div>
+                        <div class="feature-title">Material-Tracking</div>
+                        <div class="feature-description">QR-Code-basierte Spulenverwaltung mit Verbrauchsprognose und Lagerortsverwaltung</div>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">✂️</div>
+                        <div class="feature-title">Integrierter Slicer</div>
+                        <div class="feature-description">Direktes Slicing mit PrusaSlicer, Profile-Management und G-Code Analyse</div>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">💰</div>
+                        <div class="feature-title">Kostenrechner</div>
+                        <div class="feature-description">Präzise Kalkulation: Material, Maschine, Energie und Personalkosten pro Druck</div>
+                    </div>
+                </div>
+            </div>
+            <div class="navigation">
+                <button class="nav-button" onclick="previousSlide()">← Zurück</button>
+                <span class="slide-counter"><span id="currentSlide">2</span> / 8</span>
+                <button class="nav-button" onclick="nextSlide()">Weiter →</button>
+            </div>
+        </div>
+
+        <!-- Slide 3: Erweiterte Features -->
+        <div class="slide">
+            <div class="slide-header">
+                <h1 class="slide-title">🎨 Erweiterte Features</h1>
+                <p class="slide-subtitle">Professionelle Werkzeuge für maximale Effizienz</p>
+            </div>
+            <div class="slide-content">
+                <div class="feature-grid">
+                    <div class="feature-card" style="background: linear-gradient(135deg, #0575e6 0%, #021b79 100%);">
+                        <div class="feature-icon">🎯</div>
+                        <div class="feature-title">Batch-Planer</div>
+                        <div class="feature-description">Optimieren Sie Druckplatten durch intelligente Bündelung mehrerer Aufträge</div>
+                    </div>
+                    <div class="feature-card" style="background: linear-gradient(135deg, #f857a6 0%, #ff5858 100%);">
+                        <div class="feature-icon">📈</div>
+                        <div class="feature-title">KPI-Dashboard</div>
+                        <div class="feature-description">OEE, MTBF, Erfolgsraten, Kosten und 20+ weitere Metriken mit interaktiven Charts</div>
+                    </div>
+                    <div class="feature-card" style="background: linear-gradient(135deg, #7f00ff 0%, #e100ff 100%);">
+                        <div class="feature-icon">🏗️</div>
+                        <div class="feature-title">Digitaler Zwilling</div>
+                        <div class="feature-description">3D-Visualisierung Ihrer Farm-Anordnung mit Layout-Editor</div>
+                    </div>
+                    <div class="feature-card" style="background: linear-gradient(135deg, #ff9a56 0%, #ff6a88 100%);">
+                        <div class="feature-icon">🔧</div>
+                        <div class="feature-title">Wartungsplanung</div>
+                        <div class="feature-description">Automatische Wartungserinnerungen mit Protokollierung und Checklisten</div>
+                    </div>
+                    <div class="feature-card" style="background: linear-gradient(135deg, #00d2ff 0%, #3a7bd5 100%);">
+                        <div class="feature-icon">📁</div>
+                        <div class="feature-title">Projekt-Management</div>
+                        <div class="feature-description">Organisieren Sie Jobs in Projekten mit Gantt-Charts und Dependencies</div>
+                    </div>
+                    <div class="feature-card" style="background: linear-gradient(135deg, #f2994a 0%, #f2c94c 100%);">
+                        <div class="feature-icon">🌡️</div>
+                        <div class="feature-title">Filament-Trockner</div>
+                        <div class="feature-description">Verwalten Sie Trocknungszyklen und optimieren Sie Material-Qualität</div>
+                    </div>
+                </div>
+            </div>
+            <div class="navigation">
+                <button class="nav-button" onclick="previousSlide()">← Zurück</button>
+                <span class="slide-counter"><span id="currentSlide">3</span> / 8</span>
+                <button class="nav-button" onclick="nextSlide()">Weiter →</button>
+            </div>
+        </div>
+
+        <!-- Slide 4: Workflow -->
+        <div class="slide">
+            <div class="slide-header">
+                <h1 class="slide-title">🔄 Workflow</h1>
+                <p class="slide-subtitle">Von der STL-Datei zum fertigen Druck in 5 einfachen Schritten</p>
+            </div>
+            <div class="slide-content">
+                <div class="workflow-steps">
+                    <div class="workflow-step">
+                        <div class="step-circle">1</div>
+                        <div class="step-label">Upload<br>STL-Datei</div>
+                    </div>
+                    <div class="workflow-step">
+                        <div class="step-circle">2</div>
+                        <div class="step-label">Slicer<br>Konfiguration</div>
+                    </div>
+                    <div class="workflow-step">
+                        <div class="step-circle">3</div>
+                        <div class="step-label">Auftrag<br>erstellen</div>
+                    </div>
+                    <div class="workflow-step">
+                        <div class="step-circle">4</div>
+                        <div class="step-label">Automatische<br>Zuweisung</div>
+                    </div>
+                    <div class="workflow-step">
+                        <div class="step-circle">5</div>
+                        <div class="step-label">Druck &<br>Monitoring</div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 60px;">
+                    <div class="architecture-diagram">
+                        <div class="layer">
+                            <div class="layer-title">🤖 Intelligente Automatisierung</div>
+                            <div class="layer-content">
+                                <strong>Auto-Scheduler:</strong> Automatische Drucker-Zuweisung basierend auf Verfügbarkeit, Material und Priorität<br>
+                                <strong>Material-Matching:</strong> Prüfung ob richtiges Filament geladen ist<br>
+                                <strong>Wartungs-Alerts:</strong> Automatische Benachrichtigungen bei fälligen Wartungen
+                            </div>
+                        </div>
+                        <div class="layer">
+                            <div class="layer-title">📊 Live-Tracking & Analytics</div>
+                            <div class="layer-content">
+                                <strong>Echtzeit-Status:</strong> Verfolgen Sie jeden Druck live<br>
+                                <strong>KPI-Monitoring:</strong> OEE, Erfolgsraten, Kosten, Material-Verbrauch<br>
+                                <strong>Historische Daten:</strong> Analyse von Trends und Performance
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="navigation">
+                <button class="nav-button" onclick="previousSlide()">← Zurück</button>
+                <span class="slide-counter"><span id="currentSlide">4</span> / 8</span>
+                <button class="nav-button" onclick="nextSlide()">Weiter →</button>
+            </div>
+        </div>
+
+        <!-- Slide 5: Technologie -->
+        <div class="slide">
+            <div class="slide-header">
+                <h1 class="slide-title">💻 Technologie-Stack</h1>
+                <p class="slide-subtitle">Moderne, bewährte Technologien für maximale Stabilität</p>
+            </div>
+            <div class="slide-content">
+                <div class="architecture-diagram">
+                    <div class="layer">
+                        <div class="layer-title">🖥️ Backend</div>
+                        <div class="layer-content">
+                            <strong>Framework:</strong> Python 3.8+ mit Flask<br>
+                            <strong>Datenbank:</strong> SQLAlchemy + SQLite (erweiterbar zu PostgreSQL/MySQL)<br>
+                            <strong>Scheduler:</strong> APScheduler für Background-Tasks<br>
+                            <strong>Real-Time:</strong> Flask-SocketIO für Live-Updates
+                        </div>
+                    </div>
+                    <div class="layer">
+                        <div class="layer-title">🎨 Frontend</div>
+                        <div class="layer-content">
+                            <strong>UI-Framework:</strong> Bootstrap 5 + Custom CSS<br>
+                            <strong>Charts:</strong> ApexCharts für interaktive Visualisierungen<br>
+                            <strong>3D-Rendering:</strong> Three.js für Digitalen Zwilling<br>
+                            <strong>JavaScript:</strong> Vanilla JS + Modern ES6+
+                        </div>
+                    </div>
+                    <div class="layer">
+                        <div class="layer-title">🔧 Integration</div>
+                        <div class="layer-content">
+                            <strong>Slicer:</strong> PrusaSlicer CLI Integration<br>
+                            <strong>Drucker-APIs:</strong> Klipper, OctoPrint, Moonraker<br>
+                            <strong>Authentifizierung:</strong> Flask-Login mit Session-Management<br>
+                            <strong>Security:</strong> CSRF-Protection, Password-Hashing
+                        </div>
+                    </div>
+                </div>
+
+                <div class="tech-stack">
+                    <span class="tech-badge">🐍 Python</span>
+                    <span class="tech-badge">🌶️ Flask</span>
+                    <span class="tech-badge">🗄️ SQLAlchemy</span>
+                    <span class="tech-badge">📊 ApexCharts</span>
+                    <span class="tech-badge">🎨 Bootstrap 5</span>
+                    <span class="tech-badge">⚡ SocketIO</span>
+                    <span class="tech-badge">🎯 Three.js</span>
+                    <span class="tech-badge">🔧 APScheduler</span>
+                </div>
+            </div>
+            <div class="navigation">
+                <button class="nav-button" onclick="previousSlide()">← Zurück</button>
+                <span class="slide-counter"><span id="currentSlide">5</span> / 8</span>
+                <button class="nav-button" onclick="nextSlide()">Weiter →</button>
+            </div>
+        </div>
+
+        <!-- Slide 6: Vorteile -->
+        <div class="slide">
+            <div class="slide-header">
+                <h1 class="slide-title">✨ Vorteile & Benefits</h1>
+                <p class="slide-subtitle">Warum Sie dieses System einsetzen sollten</p>
+            </div>
+            <div class="slide-content">
+                <div class="benefits-list">
+                    <div class="benefit-item">
+                        <span class="benefit-icon">⚡</span>
+                        <span class="benefit-text">Bis zu 30% schnellere Auftragsdurchlaufzeit</span>
+                    </div>
+                    <div class="benefit-item">
+                        <span class="benefit-icon">💰</span>
+                        <span class="benefit-text">20% Reduzierung der Materialverschwendung</span>
+                    </div>
+                    <div class="benefit-item">
+                        <span class="benefit-icon">📈</span>
+                        <span class="benefit-text">15% höhere Drucker-Auslastung</span>
+                    </div>
+                    <div class="benefit-item">
+                        <span class="benefit-icon">🎯</span>
+                        <span class="benefit-text">25% weniger Fehldrucke durch Qualitätskontrolle</span>
+                    </div>
+                    <div class="benefit-item">
+                        <span class="benefit-icon">🔧</span>
+                        <span class="benefit-text">Automatische Wartungsplanung spart Zeit</span>
+                    </div>
+                    <div class="benefit-item">
+                        <span class="benefit-icon">📊</span>
+                        <span class="benefit-text">Transparente Kostenübersicht pro Druck</span>
+                    </div>
+                    <div class="benefit-item">
+                        <span class="benefit-icon">🌐</span>
+                        <span class="benefit-text">Zugriff von überall via Webbrowser</span>
+                    </div>
+                    <div class="benefit-item">
+                        <span class="benefit-icon">🔒</span>
+                        <span class="benefit-text">Rollenbasiertes Zugriffsmanagement</span>
+                    </div>
+                    <div class="benefit-item">
+                        <span class="benefit-icon">📱</span>
+                        <span class="benefit-text">Responsive Design für Mobile & Tablet</span>
+                    </div>
+                    <div class="benefit-item">
+                        <span class="benefit-icon">💾</span>
+                        <span class="benefit-text">Automatisches Backup & Export</span>
+                    </div>
+                    <div class="benefit-item">
+                        <span class="benefit-icon">🚀</span>
+                        <span class="benefit-text">Skalierbar für beliebig viele Drucker</span>
+                    </div>
+                    <div class="benefit-item">
+                        <span class="benefit-icon">🔓</span>
+                        <span class="benefit-text">100% Open Source & anpassbar</span>
+                    </div>
+                </div>
+            </div>
+            <div class="navigation">
+                <button class="nav-button" onclick="previousSlide()">← Zurück</button>
+                <span class="slide-counter"><span id="currentSlide">6</span> / 8</span>
+                <button class="nav-button" onclick="nextSlide()">Weiter →</button>
+            </div>
+        </div>
+
+        <!-- Slide 7: Use Cases -->
+        <div class="slide">
+            <div
